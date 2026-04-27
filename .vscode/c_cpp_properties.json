@@ -1,0 +1,36 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "D:/C_complier/ucrt64/include/gtk-4.0",
+                "D:/C_complier/ucrt64/include/pango-1.0",
+                "D:/C_complier/ucrt64/include/fribidi",
+                "D:/C_complier/ucrt64/include",
+                "D:/C_complier/ucrt64/include/harfbuzz",
+                "D:/C_complier/ucrt64/include/gdk-pixbuf-2.0",
+                "D:/C_complier/ucrt64/include/webp",
+                "D:/C_complier/ucrt64/include/cairo",
+                "D:/C_complier/ucrt64/include/freetype2",
+                "D:/C_complier/ucrt64/include/libpng16",
+                "D:/C_complier/ucrt64/include/pixman-1",
+                "D:/C_complier/ucrt64/include/graphene-1.0",
+                "D:/C_complier/ucrt64/lib/graphene-1.0/include",
+                "D:/C_complier/ucrt64/include/glib-2.0",
+                "D:/C_complier/ucrt64/lib/glib-2.0/include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.26100.0",
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}

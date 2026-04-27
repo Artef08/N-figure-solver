@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "Build GTK4 Project",
+            "command": "D:/C_complier/ucrt64/bin/gcc.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "${fileDirname}\\*.c",
+                "-o",
+                "${fileDirname}\\${fileBasenameNoExtension}.exe",
+                "-ID:/C_complier/ucrt64/include/gtk-4.0",
+                "-ID:/C_complier/ucrt64/include/pango-1.0",
+                "-ID:/C_complier/ucrt64/include/glib-2.0",
+                "-ID:/C_complier/ucrt64/lib/glib-2.0/include",
+                "-ID:/C_complier/ucrt64/include/harfbuzz",
+                "-ID:/C_complier/ucrt64/include/freetype2",
+                "-ID:/C_complier/ucrt64/include/cairo",
+                "-ID:/C_complier/ucrt64/include/gdk-pixbuf-2.0",
+                "-ID:/C_complier/ucrt64/include/graphene-1.0",
+                "-ID:/C_complier/ucrt64/lib/graphene-1.0/include",
+                "-ID:/C_complier/ucrt64/include/fribidi",
+                "-ID:/C_complier/ucrt64/include",
+                "-LD:/C_complier/ucrt64/lib",
+                "-lgtk-4",
+                "-lglib-2.0",
+                "-lgobject-2.0",
+                "-lgio-2.0"
+            ],
+            "options": {
+                "cwd": "D:/C_complier/ucrt64/bin"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Сборка курсового проекта с GTK4"
+        }
+    ]
+}
