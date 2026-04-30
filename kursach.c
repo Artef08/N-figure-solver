@@ -57,7 +57,7 @@ typedef struct {
 } dataAdd;
 
 //stop solving if we ran out of time
-static gboolean cancel_solve_timeout(gpointer user_data) {
+static gboolean cancelSolveTimeout(gpointer user_data) {
     GtkWidget *button = GTK_WIDGET(user_data);
     g_atomic_int_set(&solve_cancel, 1);
     gtk_widget_set_sensitive(button, TRUE);
@@ -65,14 +65,14 @@ static gboolean cancel_solve_timeout(gpointer user_data) {
 }
 
 //adding files that we added
-static void add_output_file(const char *filename) {
+static void addOutputFile(const char *filename) {
     g_mutex_lock(&file_list_mutex);
     output_files = g_list_append(output_files, g_strdup(filename));
     g_mutex_unlock(&file_list_mutex);
 }
 
 //so we can delete them after closing
-static void delete_all_output_files(void) {
+static void deleteAllOutputFiles(void) {
     g_mutex_lock(&file_list_mutex);
     for (GList *l = output_files; l != NULL; l = l->next) {
         const char *fname = (const char *)l->data;
@@ -89,7 +89,7 @@ static void SizeChange(GtkRange* scaleN, gpointer userData){
     data->size=(int)gtk_range_get_value(scaleN);
 }
 
-static void toggle_solves(GtkToggleButton* checkAll,gpointer userData){
+static void toggleSolves(GtkToggleButton* checkAll,gpointer userData){
     dataSolve* data=(dataSolve*)userData;
     GtkWidget* scale=g_object_get_data(G_OBJECT(checkAll),"scale");
     //here we adjusting max size so if we choose 80 and switch to all solves it will change to max
@@ -106,7 +106,7 @@ static void toggle_solves(GtkToggleButton* checkAll,gpointer userData){
     }
 }
 
-static gboolean reenable_button(gpointer userData) {
+static gboolean reenableButton(gpointer userData) {
     gtk_widget_set_sensitive(GTK_WIDGET(userData), TRUE);
     return G_SOURCE_REMOVE;
 }
@@ -116,7 +116,7 @@ gpointer SolveThread(gpointer userData) {
     SolveThreadData* data = (SolveThreadData*)userData;
 
     if (g_atomic_int_get(&solve_cancel)) {
-        g_idle_add(reenable_button, data->button);
+        g_idle_add(reenableButton, data->button);
         free(data);
         return NULL;
     }
@@ -127,14 +127,14 @@ gpointer SolveThread(gpointer userData) {
     FILE* test = fopen(filename, "r");
     if (test != NULL) {
         fclose(test);
-        g_idle_add(reenable_button, data->button);
+        g_idle_add(reenableButton, data->button);
         free(data);
         return NULL;
     }
     //crating a new file
     FILE* f = fopen(filename, "w");
     if (f == NULL) {
-        g_idle_add(reenable_button, data->button);
+        g_idle_add(reenableButton, data->button);
         free(data);
         return NULL;
     }
@@ -164,7 +164,7 @@ gpointer SolveThread(gpointer userData) {
     }
 
     fclose(f);
-    g_idle_add(reenable_button, data->button);
+    g_idle_add(reenableButton, data->button);
     free(data);
     return NULL;
 }
@@ -179,7 +179,7 @@ void showErrorNameExists(GtkButton* button){
     gtk_alert_dialog_show(dialog,parent);
 }
 
-static gboolean close_window_idle(gpointer user_data) {
+static gboolean closeWindowIdle(gpointer user_data) {
     GtkWindow *win = GTK_WINDOW(user_data);
     gtk_window_destroy(win);
     return G_SOURCE_REMOVE;
@@ -212,7 +212,7 @@ static void checkInput(GtkButton* button,dataAdd* data){
         gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[*ind]), GTK_CHECK_BUTTON(btns[0]));
         gtk_box_append(GTK_BOX(box), btns[*ind]);
         (*ind)++;
-        g_idle_add(close_window_idle, gtk_widget_get_root(GTK_WIDGET(button)));
+        g_idle_add(closeWindowIdle, gtk_widget_get_root(GTK_WIDGET(button)));
     }
 }
 
@@ -243,7 +243,7 @@ static void toggleInfDiagOther(GtkCheckButton* button,gpointer userData){
     fig->inf_movement[OTHER_DIAG]=gtk_check_button_get_active(GTK_CHECK_BUTTON(button))? TRUE:FALSE;
 }
 
-static void grid_toggled(GtkToggleButton *btn, gpointer user_data) {
+static void gridToggled(GtkToggleButton *btn, gpointer user_data) {
     dataAdd *data = (dataAdd*) user_data;
     int r = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "grid-row"));
     int c = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "grid-col"));
@@ -315,7 +315,7 @@ static void GetNewFig(GtkWidget* button,dataAdd* data){
                 gtk_button_set_child(GTK_BUTTON(cell),img);
             }else{
                 gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cell),FALSE);
-                g_signal_connect(cell,"toggled",G_CALLBACK(grid_toggled),data);
+                g_signal_connect(cell,"toggled",G_CALLBACK(gridToggled),data);
             }
             gtk_grid_attach(GTK_GRID(grid),cell,j,i,1,1);
         }
@@ -381,7 +381,7 @@ void StartSolve(GtkButton* button, gpointer userData) {
     if (ind != -1) {
         gtk_widget_set_sensitive(GTK_WIDGET(button), FALSE);
         g_atomic_int_set(&solve_cancel, 0);
-        g_timeout_add_seconds(60, cancel_solve_timeout, button);
+        g_timeout_add_seconds(60, cancelSolveTimeout, button);
 
         SolveThreadData* tdata = malloc(sizeof(SolveThreadData));
         tdata->fig = data->figures[ind];
@@ -479,7 +479,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     data->flagAll = TRUE;
     data->size = DEFAULT_SIZE;
 
-    g_signal_connect(checkAllSolves, "toggled", G_CALLBACK(toggle_solves), data);
+    g_signal_connect(checkAllSolves, "toggled", G_CALLBACK(toggleSolves), data);
     g_signal_connect(scaleN, "value-changed", G_CALLBACK(SizeChange), data);
 
     GtkWidget* buttonSolve = gtk_button_new_with_label("Solve");
@@ -493,7 +493,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_box_append(GTK_BOX(vbox), buttonSolve);
     gtk_window_set_child(GTK_WINDOW(window), vbox);
     gtk_window_present(GTK_WINDOW(window));
-    g_signal_connect(window, "destroy", G_CALLBACK(delete_all_output_files), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(deleteAllOutputFiles), NULL);
 }
 
 int main(int argc, char** argv) {
