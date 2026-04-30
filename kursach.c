@@ -1,17 +1,30 @@
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <gtk/gtk.h>
 #include <glib.h>
 #include "algoritms.h"
 
 #define MAX_FIGURES 15
+
 #define DEFAULT_SIZE 8
 #define MAX_SIZE_ALL 16     //max size for all solves
 #define MAX_SIZE_ONE 100    //max size for one solve prob change later
+
 #define VERT_MOVEMENT 0
 #define HORZ_MOVEMENT 1
 #define MAIN_DIAG 2
 #define OTHER_DIAG 3
+
+#define SP_MOVEMENT_SZ 9
+#define CENTER_MOVMENT 5
+
 #define INF 10000000        //max iterations for local conflicts
+
+#define MAIN_WIND_VERT 800
+#define MAIN_WIND_HORZ 1200
+#define ADDING_WIND_VERT 500
+#define ADDING_WIND_HORZ 100
 
 figure test;
 static GMutex file_list_mutex;
@@ -30,7 +43,18 @@ typedef struct {
     int size;
     int flag;
     GtkWidget* button; 
+    const char *fullName; 
 } SolveThreadData;      //struct for threads
+
+typedef struct {
+    GtkWidget** btns;
+    GtkWidget* box;
+    figure* figures;
+    figure newFig;
+    int* ind;
+    char* name;
+    int flagButtonSignal;
+} dataAdd;
 
 //stop solving if we ran out of time
 static gboolean cancel_solve_timeout(gpointer user_data) {
@@ -97,8 +121,8 @@ gpointer SolveThread(gpointer userData) {
         return NULL;
     }
     //and we don't start if we got a solution
-    char filename[64];
-    snprintf(filename, sizeof(filename), "%c_%d_%d.txt", data->fig.name, data->size,data->flag);
+    char filename[128];
+    snprintf(filename, sizeof(filename), "%s_%d_%d.txt", data->fullName, data->size,data->flag);
 
     FILE* test = fopen(filename, "r");
     if (test != NULL) {
@@ -145,12 +169,202 @@ gpointer SolveThread(gpointer userData) {
     return NULL;
 }
 
-//TODO add button to use this function in gui
-static void AppendToBox(GtkWidget* box, GtkWidget** btns, figure* figures, figure fig, int ind, char* name) {
-    figures[ind] = fig;
-    btns[ind] = gtk_check_button_new_with_label(name);
-    gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[ind]), GTK_CHECK_BUTTON(btns[0]));
-    gtk_box_append(GTK_BOX(box), btns[ind]);
+void showErrorNameExists(GtkButton* button){
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+    GtkAlertDialog* dialog=gtk_alert_dialog_new("This name already exists");
+    gtk_alert_dialog_set_detail(dialog,"Another figure has this name, call this name another way.");
+    gtk_alert_dialog_set_buttons(dialog,(const char*[]){"OK",NULL});
+
+    gtk_alert_dialog_show(dialog,parent);
+}
+
+static gboolean close_window_idle(gpointer user_data) {
+    GtkWindow *win = GTK_WINDOW(user_data);
+    gtk_window_destroy(win);
+    return G_SOURCE_REMOVE;
+}
+
+static void checkInput(GtkButton* button,dataAdd* data){
+    GtkWidget** btns=data->btns;
+    const char* name=data->name;
+    if (name == NULL) name = "";
+    int unique=TRUE;
+    int curFigs=*(data->ind);
+    for(int i=0;i<curFigs;i++){
+       const char* label = g_object_get_data(G_OBJECT(btns[i]), "fig-name");
+        if(label && strcmp(label,name)==0){
+            showErrorNameExists(button);
+            unique=FALSE;
+            break;
+        }
+    }
+    if(unique==TRUE){
+        GtkWidget* box=data->box;
+        figure* figures=data->figures;
+        figure fig=data->newFig;
+        int* ind=data->ind;
+        fig.name=name[0];
+
+        figures[*ind] = fig;
+        btns[*ind] = gtk_check_button_new_with_label(name);
+        g_object_set_data_full(G_OBJECT(btns[*ind]), "fig-name",g_strdup(name), g_free);
+        gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[*ind]), GTK_CHECK_BUTTON(btns[0]));
+        gtk_box_append(GTK_BOX(box), btns[*ind]);
+        (*ind)++;
+        g_idle_add(close_window_idle, gtk_widget_get_root(GTK_WIDGET(button)));
+    }
+}
+
+static void onEntryChanged(GtkEntry* entry,gpointer userData){
+    dataAdd* data=(dataAdd*)userData;
+    g_free(data->name);
+    const char* text=gtk_editable_get_text(GTK_EDITABLE(entry));
+    data->name = g_strdup(text ? text : "");
+}
+
+static void toggleInfHorz(GtkCheckButton* button,gpointer userData){
+    figure* fig=(figure*)userData;
+    fig->inf_movement[HORZ_MOVEMENT]=gtk_check_button_get_active(GTK_CHECK_BUTTON(button))? TRUE:FALSE;
+}
+
+static void toggleInfVert(GtkCheckButton* button,gpointer userData){
+    figure* fig=(figure*)userData;
+    fig->inf_movement[VERT_MOVEMENT]=gtk_check_button_get_active(GTK_CHECK_BUTTON(button))? TRUE:FALSE; 
+} 
+
+static void toggleInfDiagMain(GtkCheckButton* button,gpointer userData){
+    figure* fig=(figure*)userData;
+    fig->inf_movement[MAIN_DIAG]=gtk_check_button_get_active(GTK_CHECK_BUTTON(button))? TRUE:FALSE;
+}
+
+static void toggleInfDiagOther(GtkCheckButton* button,gpointer userData){
+    figure* fig=(figure*)userData;
+    fig->inf_movement[OTHER_DIAG]=gtk_check_button_get_active(GTK_CHECK_BUTTON(button))? TRUE:FALSE;
+}
+
+static void grid_toggled(GtkToggleButton *btn, gpointer user_data) {
+    dataAdd *data = (dataAdd*) user_data;
+    int r = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "grid-row"));
+    int c = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "grid-col"));
+    gboolean active = gtk_toggle_button_get_active(btn);
+    data->newFig.special_movement[r][c] = active ? TRUE : FALSE;
+}
+
+static void GetNewFig(GtkWidget* button,dataAdd* data){
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+    GtkWidget *newWind = gtk_window_new();
+    gtk_window_set_title(GTK_WINDOW(newWind),"Adding a figure");
+    gtk_window_set_default_size(GTK_WINDOW(newWind),ADDING_WIND_HORZ,ADDING_WIND_VERT);
+    gtk_window_set_resizable(GTK_WINDOW(newWind), FALSE);
+    gtk_window_set_transient_for(GTK_WINDOW(newWind),parent);
+    gtk_window_set_modal(GTK_WINDOW(newWind),TRUE);
+
+    data->newFig=InitEmpty();
+    GtkWidget* vbox=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
+
+    g_free(data->name);
+    data->name=g_strdup("");
+
+    GtkWidget* entry=gtk_entry_new();
+    gtk_widget_set_hexpand(entry,TRUE);
+    g_signal_connect(entry,"changed", G_CALLBACK(onEntryChanged),data);
+
+    GtkWidget* boxCheckbuttons=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
+
+    GtkWidget* buttonInfHorz=gtk_check_button_new_with_label("Infinite horizontal movement");
+    GtkWidget* buttonInfVert=gtk_check_button_new_with_label("Infinite vertical movement");
+    GtkWidget* buttonInfDiagMain=gtk_check_button_new_with_label("Infinite movement on main diagonal");
+    GtkWidget* buttonInfDiagOther=gtk_check_button_new_with_label("Infinite movement on other diagonal");
+
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(buttonInfHorz),FALSE);
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(buttonInfVert),FALSE);
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(buttonInfDiagMain),FALSE);
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(buttonInfDiagOther),FALSE);
+
+    g_signal_connect(GTK_CHECK_BUTTON(buttonInfHorz),"toggled",G_CALLBACK(toggleInfHorz),&(data->newFig));
+    g_signal_connect(GTK_CHECK_BUTTON(buttonInfVert),"toggled",G_CALLBACK(toggleInfVert),&(data->newFig));
+    g_signal_connect(GTK_CHECK_BUTTON(buttonInfDiagMain),"toggled",G_CALLBACK(toggleInfDiagMain),&(data->newFig));
+    g_signal_connect(GTK_CHECK_BUTTON(buttonInfDiagOther),"toggled",G_CALLBACK(toggleInfDiagOther),&(data->newFig));
+
+    gtk_box_append(GTK_BOX(boxCheckbuttons),buttonInfHorz);
+    gtk_box_append(GTK_BOX(boxCheckbuttons),buttonInfVert);
+    gtk_box_append(GTK_BOX(boxCheckbuttons),buttonInfDiagMain);
+    gtk_box_append(GTK_BOX(boxCheckbuttons),buttonInfDiagOther);
+
+    GtkWidget* grid=gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid),2);
+    gtk_grid_set_column_spacing(GTK_GRID(grid),2);
+    gtk_widget_set_margin_top(grid,6);
+    gtk_widget_set_margin_bottom(grid,6);
+
+    for(int i=0;i<SP_MOVEMENT_SZ;i++){
+        for(int j=0;j<SP_MOVEMENT_SZ;j++){
+            GtkWidget* cell=gtk_toggle_button_new();
+
+            gtk_button_set_child(GTK_BUTTON(cell),NULL);
+            gtk_widget_set_size_request(cell,32,32);
+
+            g_object_set_data(G_OBJECT(cell),"grid-row",GINT_TO_POINTER(i));
+            g_object_set_data(G_OBJECT(cell),"grid-col",GINT_TO_POINTER(j));
+
+            if(i==CENTER_MOVMENT-1 && j==CENTER_MOVMENT-1){
+                gtk_widget_set_sensitive(cell,FALSE);
+                GtkWidget* img=gtk_image_new_from_icon_name("image-missing");
+                gtk_button_set_child(GTK_BUTTON(cell),img);
+            }else{
+                gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cell),FALSE);
+                g_signal_connect(cell,"toggled",G_CALLBACK(grid_toggled),data);
+            }
+            gtk_grid_attach(GTK_GRID(grid),cell,j,i,1,1);
+        }
+    }
+    gtk_widget_set_halign(grid,GTK_ALIGN_CENTER);
+
+    GtkWidget* buttonReady = gtk_button_new_with_label("Add figure");
+    g_signal_connect(buttonReady, "clicked", G_CALLBACK(checkInput),data);
+    gtk_box_append(GTK_BOX(vbox),entry);
+    gtk_box_append(GTK_BOX(vbox),boxCheckbuttons);
+    gtk_box_append(GTK_BOX(vbox),grid);
+    gtk_box_append(GTK_BOX(vbox),buttonReady);
+    gtk_window_set_child(GTK_WINDOW(newWind),vbox);
+    gtk_window_present(GTK_WINDOW(newWind));
+}
+
+static void showErrorMax(GtkButton* button){
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+    GtkAlertDialog* dialog=gtk_alert_dialog_new("Too many figures");
+    gtk_alert_dialog_set_detail(dialog,"Cap of figures is reached. Delete old figures to add new.");
+    gtk_alert_dialog_set_buttons(dialog,(const char*[]){"OK",NULL});
+
+    gtk_alert_dialog_show(dialog,parent); 
+}
+
+static void AppendToBox(GtkButton* button,gpointer userData) {
+    dataAdd* data = (dataAdd*) userData;
+    if (*(data->ind) == MAX_FIGURES) {
+        showErrorMax(button);
+        return;
+    }
+
+    if (data->flagButtonSignal == 1) {
+        GetNewFig(GTK_WIDGET(button), data);
+    } else {
+        GtkWidget** btns = data->btns;
+        GtkWidget* box = data->box;
+        figure* figures = data->figures;
+        int* ind = data->ind;
+        const char* name = data->name;
+
+        figures[*ind] = data->newFig;
+        btns[*ind] = gtk_check_button_new_with_label(name);
+        g_object_set_data_full(G_OBJECT(btns[*ind]), "fig-name",g_strdup(name), g_free);
+        gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[*ind]),GTK_CHECK_BUTTON(btns[0]));
+        gtk_box_append(GTK_BOX(box), btns[*ind]);
+        (*ind)++;
+    }
 }
 
 //callback for solve button
@@ -174,6 +388,12 @@ void StartSolve(GtkButton* button, gpointer userData) {
         tdata->size = data->size;
         tdata->flag = data->flagAll;
         tdata->button = GTK_WIDGET(button);
+
+        const char *fullName = g_object_get_data(G_OBJECT(data->btns[ind]), "fig-name");
+        if (fullName == NULL || strlen(fullName) == 0)
+            fullName = "unnamed";
+        tdata->fullName = fullName;
+
         GThread* thread = g_thread_new("solver", SolveThread, tdata);
         g_thread_unref(thread);
     }
@@ -185,7 +405,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
 
     window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(window), "N-Piece Solver");
-    gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
+    gtk_window_set_default_size(GTK_WINDOW(window),MAIN_WIND_HORZ,MAIN_WIND_VERT);
 
     //creating radio button box
     box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -202,13 +422,45 @@ static void activate(GtkApplication* app, gpointer user_data) {
     for (int i = 0; i < MAX_FIGURES; i++) figures[i] = InitEmpty();
 
     btns[0] = gtk_check_button_new_with_label("Queen");
+    g_object_set_data_full(G_OBJECT(btns[0]), "fig-name",g_strdup("Queen"), g_free);
     gtk_check_button_set_active(GTK_CHECK_BUTTON(btns[0]), TRUE);
     figures[0] = InitQueen();
     gtk_box_append(GTK_BOX(box), btns[0]);
     //queen adding
 
-    AppendToBox(box, btns, figures, InitMagarg(), 1, "Mahoraga");   //magaraga adding, ill change it later(maybe)
-    AppendToBox(box, btns, figures, test, 2, "rooknight");          //testing of files adding
+    int* lastInd=g_new(int,1);
+    *lastInd=1;
+
+    dataAdd* dataAddfig=g_new(dataAdd,1);
+    dataAddfig->box=box;
+    dataAddfig->btns=btns;
+    dataAddfig->figures=figures;
+    dataAddfig->ind=lastInd;
+    dataAddfig->flagButtonSignal=0;
+    
+    GtkWidget* buttonAdd = gtk_button_new();
+    GtkWidget* imgPlus= gtk_image_new_from_icon_name("list-add-symbolic");
+
+    gtk_button_set_child(GTK_BUTTON(buttonAdd),imgPlus);
+    gtk_widget_set_tooltip_text(buttonAdd,"Add");
+
+
+    g_signal_connect(buttonAdd,"clicked",G_CALLBACK(AppendToBox),dataAddfig);
+
+    dataAddfig->name=g_strdup("magaraga");
+    dataAddfig->newFig=InitMagarg();
+
+    AppendToBox(GTK_BUTTON(buttonAdd),dataAddfig);                                    //magaraga adding
+    
+    g_free(dataAddfig->name);
+    dataAddfig->name=g_strdup("rooknight");
+    dataAddfig->newFig=test;
+
+    AppendToBox(GTK_BUTTON(buttonAdd),dataAddfig);          //testing of files adding
+
+    g_free(dataAddfig->name);
+    dataAddfig->name=g_strdup("");
+    dataAddfig->flagButtonSignal=1;
 
     GtkWidget* scaleN = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,1.0,(double)MAX_SIZE_ALL,1.0);
     gtk_range_set_value(GTK_RANGE(scaleN),(double)DEFAULT_SIZE);
@@ -236,6 +488,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_box_append(GTK_BOX(vbox), scaleN);
     gtk_box_append(GTK_BOX(vbox), box);
+    gtk_box_append(GTK_BOX(vbox),buttonAdd);
     gtk_box_append(GTK_BOX(vbox), checkAllSolves);
     gtk_box_append(GTK_BOX(vbox), buttonSolve);
     gtk_window_set_child(GTK_WINDOW(window), vbox);
