@@ -56,6 +56,13 @@ typedef struct {
     int flagButtonSignal;
 } dataAdd;
 
+typedef struct {
+    GtkWidget** btns;
+    GtkWidget* box;
+    figure* figures;
+    int* ind;
+} dataRem;
+
 //stop solving if we ran out of time
 static gboolean cancelSolveTimeout(gpointer user_data) {
     GtkWidget *button = GTK_WIDGET(user_data);
@@ -122,9 +129,9 @@ gpointer SolveThread(gpointer userData) {
     }
     //and we don't start if we got a solution
     char filename[128];
-    snprintf(filename, sizeof(filename), "%s_%d_%d.txt", data->fullName, data->size,data->flag);
+    snprintf(filename, sizeof(filename), "%s_%d_%d.slv", data->fullName, data->size,data->flag);
 
-    FILE* test = fopen(filename, "r");
+    FILE* test = fopen(filename, "rb");
     if (test != NULL) {
         fclose(test);
         g_idle_add(reenableButton, data->button);
@@ -132,7 +139,7 @@ gpointer SolveThread(gpointer userData) {
         return NULL;
     }
     //crating a new file
-    FILE* f = fopen(filename, "w");
+    FILE* f = fopen(filename, "wb");
     if (f == NULL) {
         g_idle_add(reenableButton, data->button);
         free(data);
@@ -140,7 +147,7 @@ gpointer SolveThread(gpointer userData) {
     }
     //printing size of a board
     fprintf(f, "%d\n\n", data->size);
-    add_output_file(filename);
+    addOutputFile(filename);
 
     //flag
     int wasCancelled = 0; 
@@ -367,6 +374,50 @@ static void AppendToBox(GtkButton* button,gpointer userData) {
     }
 }
 
+void showErrorOneFig(GtkButton* button){
+    GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+
+    GtkAlertDialog* dialog=gtk_alert_dialog_new("Last figure left");
+    gtk_alert_dialog_set_detail(dialog,"Last figure left, add new figure to delete this figure");
+    gtk_alert_dialog_set_buttons(dialog,(const char*[]){"OK",NULL});
+
+    gtk_alert_dialog_show(dialog,parent); 
+}
+
+void RemoveCurFig(GtkButton* button, gpointer userData){
+    dataRem* data=(dataRem*)userData;
+    GtkWidget* box=data->box;
+    GtkWidget** btns=data->btns;
+    figure* figures=data->figures;
+    int* curSize = data->ind;
+
+    if(*curSize==1){
+        showErrorOneFig(button);
+    }else{                
+        int indAct=-1;
+        for(int i=0;i<*curSize;i++){
+            if(btns[i]&&gtk_check_button_get_active(GTK_CHECK_BUTTON(btns[i])))
+                indAct=i;
+        }
+
+        gtk_box_remove(GTK_BOX(box),btns[indAct]);
+
+        for(int i=indAct;i<*curSize-1;i++){
+            btns[i]=btns[i+1];
+            figures[i]=figures[i+1];
+        }
+
+        btns[*curSize - 1] = NULL;
+        figures[*curSize - 1] = InitEmpty();
+
+        if(indAct==*curSize-1) indAct--;
+
+        (*curSize)--;
+
+        gtk_check_button_set_active(GTK_CHECK_BUTTON(btns[indAct]),TRUE);
+    }
+}
+
 //callback for solve button
 void StartSolve(GtkButton* button, gpointer userData) {
     dataSolve* data = (dataSolve*)userData;
@@ -413,12 +464,10 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_halign(box, GTK_ALIGN_START);
     gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
 
-    GtkWidget** btns = (GtkWidget**)malloc(MAX_FIGURES * sizeof(GtkWidget*));
-    if (btns == NULL) { g_object_unref(app); return; }
+    GtkWidget** btns = g_new(GtkWidget*, MAX_FIGURES);
     for (int i = 0; i < MAX_FIGURES; i++) btns[i] = NULL;
 
-    figure* figures = (figure*)malloc(MAX_FIGURES * sizeof(figure));
-    if (figures == NULL) { g_object_unref(app); return; }
+    figure* figures = g_new(figure,MAX_FIGURES);
     for (int i = 0; i < MAX_FIGURES; i++) figures[i] = InitEmpty();
 
     btns[0] = gtk_check_button_new_with_label("Queen");
@@ -438,14 +487,31 @@ static void activate(GtkApplication* app, gpointer user_data) {
     dataAddfig->ind=lastInd;
     dataAddfig->flagButtonSignal=0;
     
+    GtkWidget* boxAddRem = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
+
     GtkWidget* buttonAdd = gtk_button_new();
-    GtkWidget* imgPlus= gtk_image_new_from_icon_name("list-add-symbolic");
+    GtkWidget* imgPlus = gtk_image_new_from_icon_name("list-add-symbolic");
 
     gtk_button_set_child(GTK_BUTTON(buttonAdd),imgPlus);
     gtk_widget_set_tooltip_text(buttonAdd,"Add");
+    gtk_box_append(GTK_BOX(boxAddRem),buttonAdd);
 
 
-    g_signal_connect(buttonAdd,"clicked",G_CALLBACK(AppendToBox),dataAddfig);
+    GtkWidget* buttonRem = gtk_button_new();
+    GtkWidget* imgRem = gtk_image_new_from_icon_name("edit-delete");
+
+    gtk_button_set_child(GTK_BUTTON(buttonRem),imgRem);
+    gtk_widget_set_tooltip_text(buttonRem,"Delete");
+    gtk_box_append(GTK_BOX(boxAddRem),buttonRem);
+
+    g_object_set_data(G_OBJECT(buttonRem),"buttons",btns);
+    g_object_set_data(G_OBJECT(buttonRem),"figures",figures);
+
+    dataRem* dataRemCurFig=g_new(dataRem,1);
+    dataRemCurFig->box=box;
+    dataRemCurFig->btns=btns;
+    dataRemCurFig->figures=figures;
+    dataRemCurFig->ind=lastInd;
 
     dataAddfig->name=g_strdup("magaraga");
     dataAddfig->newFig=InitMagarg();
@@ -464,6 +530,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
 
     GtkWidget* scaleN = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,1.0,(double)MAX_SIZE_ALL,1.0);
     gtk_range_set_value(GTK_RANGE(scaleN),(double)DEFAULT_SIZE);
+    gtk_widget_set_tooltip_text(scaleN,"Amount of figures");
     gtk_scale_set_draw_value(GTK_SCALE(scaleN), TRUE);
     gtk_scale_set_value_pos(GTK_SCALE(scaleN), GTK_POS_BOTTOM);
     gtk_widget_set_hexpand(scaleN, TRUE);
@@ -479,16 +546,18 @@ static void activate(GtkApplication* app, gpointer user_data) {
     data->flagAll = TRUE;
     data->size = DEFAULT_SIZE;
 
+    GtkWidget* buttonSolve = gtk_button_new_with_label("Solve");
+
     g_signal_connect(checkAllSolves, "toggled", G_CALLBACK(toggleSolves), data);
     g_signal_connect(scaleN, "value-changed", G_CALLBACK(SizeChange), data);
-
-    GtkWidget* buttonSolve = gtk_button_new_with_label("Solve");
     g_signal_connect(buttonSolve, "clicked", G_CALLBACK(StartSolve), data);
+    g_signal_connect(buttonAdd,"clicked",G_CALLBACK(AppendToBox),dataAddfig);
+    g_signal_connect(buttonRem,"clicked",G_CALLBACK(RemoveCurFig),dataRemCurFig);
 
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_box_append(GTK_BOX(vbox), scaleN);
     gtk_box_append(GTK_BOX(vbox), box);
-    gtk_box_append(GTK_BOX(vbox),buttonAdd);
+    gtk_box_append(GTK_BOX(vbox),boxAddRem);
     gtk_box_append(GTK_BOX(vbox), checkAllSolves);
     gtk_box_append(GTK_BOX(vbox), buttonSolve);
     gtk_window_set_child(GTK_WINDOW(window), vbox);
@@ -497,7 +566,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
 }
 
 int main(int argc, char** argv) {
-    test = AddFigure("rooknight.txt");
+    test = AddFigure("rooknight.fig");
     GtkApplication* app = gtk_application_new("com.N-piece-Solver", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
     int status = g_application_run(G_APPLICATION(app), argc, argv);

@@ -411,7 +411,7 @@ void solveLocalConflicts(FILE* f, figure fig, int n, int maxSteps) {
 
                                             //adding a figure from a file
 figure AddFigure(char* filename){
-    FILE* fig=fopen(filename,"r");
+    FILE* fig=fopen(filename,"rb");
     if(fig==NULL){
         perror("fopen");
         errormsg();
