@@ -149,7 +149,7 @@ int Safe(figure** board, figure fig, int row, int col, int n){
 }
 
                                                     //generating all solves and appending to file 
-long long solveAll(FILE* f, figure** board, figure fig, int n, int placed, int startCell){
+uint64_t solveAll(FILE* f, figure** board, figure fig, int n, int placed, int startCell){
     static _Thread_local int call_count = 0;
                                                     //if we can't find a solution in time
     if (++call_count >= 1024) {
@@ -172,7 +172,7 @@ long long solveAll(FILE* f, figure** board, figure fig, int n, int placed, int s
         return 1;
     }
     figure air=InitEmpty();
-    long long ans=0;
+    uint64_t ans=0;
                                                     //iterating over all cells bcs we can put for example pawns in one row
     for(int cell=startCell; cell<n*n; cell++){
         int row=cell/n;
@@ -187,7 +187,7 @@ long long solveAll(FILE* f, figure** board, figure fig, int n, int placed, int s
 }
 
                                                     //if we have inf in rows we do this faster for big n(althoug size matters 16 here is very big)
-long long solveRowByRow(FILE* f, figure** board, figure fig, int n, int row) {
+uint64_t solveRowByRow(FILE* f, figure** board, figure fig, int n, int row) {
     static _Thread_local int call_count = 0;
     if (++call_count >= 1024) {
         call_count = 0;
@@ -209,7 +209,7 @@ long long solveRowByRow(FILE* f, figure** board, figure fig, int n, int row) {
     }
                                                 //we do same thing but we iterate over cols
     figure air = InitEmpty();
-    long long ans = 0;
+    uint64_t ans = 0;
     for (int col = 0; col < n; col++) {
         if (Safe(board, fig, row, col, n)) {
             board[row][col] = fig;
