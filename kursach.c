@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 #include <glib.h>
 #include "algoritms.h"
+#include "queue.h"
 
 #define MAX_FIGURES 15
 
@@ -17,7 +18,7 @@
 #define OTHER_DIAG 3
 
 #define SP_MOVEMENT_SZ 9
-#define CENTER_MOVMENT 5
+#define CENTER_MOVMENT 4
 
 #define INF 10000000        //max iterations for local conflicts
 
@@ -148,6 +149,7 @@ static void SizeChange(GtkRange* scaleN, gpointer userData){
 static void toggleSolves(GtkToggleButton* checkAll,gpointer userData){
     dataSolve* data=(dataSolve*)userData;
     GtkWidget* scale=g_object_get_data(G_OBJECT(checkAll),"scale");
+    GtkWidget* boxQueue=g_object_get_data(G_OBJECT(checkAll),"box-queue");
     //here we adjusting max size so if we choose 80 and switch to all solves it will change to max
     if(scale){
         double new_max=gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll))? (double)MAX_SIZE_ALL : (double)MAX_SIZE_ONE;
@@ -158,6 +160,9 @@ static void toggleSolves(GtkToggleButton* checkAll,gpointer userData){
             gtk_adjustment_set_value(adj, new_max);
         }
         data->flagAll=gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll))? TRUE:FALSE;
+        gboolean all = gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll));
+        gtk_widget_set_opacity(boxQueue, all ? 1.0 : 0.0); 
+        gtk_widget_set_sensitive(boxQueue, all); 
         data->size = (int)gtk_adjustment_get_value(adj);
     }
 }
@@ -169,10 +174,113 @@ static gboolean reenableButton(gpointer userData) {
 
 static gboolean setSolutionFileIdle(gpointer userData) {
     dataDraw* data=(dataDraw*)userData;
+    g_object_set_data(G_OBJECT(data->board), "solution-queue", NULL);
     g_object_set_data_full(G_OBJECT(data->board), "solution-file", data->filename, g_free);
     gtk_widget_queue_draw(data->board);
     g_free(data);
     return G_SOURCE_REMOVE;
+}
+
+static void drawBoard(cairo_t* cr,int width,int height,gpointer userData){
+    cairo_set_source_rgb(cr,1,1,1);
+    cairo_paint(cr);
+    int* size=(int*)userData;
+    double TileSizeScale=(double)TILE_SIZE*DEFAULT_SIZE/(double)(*size);
+
+    for(int i=0;i<*size;i++){
+        for(int j=0;j<*size;j++){
+            if((i + j) % 2 == 0)
+                cairo_set_source_rgb(cr, 0.94, 0.94, 0.94);
+            else
+                cairo_set_source_rgb(cr, 0.30, 0.30, 0.30);
+            cairo_rectangle(cr,j*TileSizeScale,i*TileSizeScale,TileSizeScale,TileSizeScale);  
+            cairo_fill(cr);  
+        }
+    }
+}
+
+static void fillQueue(Queue* q,FILE* f,int size){
+    int sizeSolution=size*2;
+    int* solution=g_new(int,sizeSolution);
+    int i=0;
+    int x,y;
+
+    while(fscanf(f,"%d %d",&x,&y)==2){
+        solution[i]=x;
+        solution[i+1]=y;
+        i+=2;
+
+        if(i==sizeSolution){
+            QueuePushBack(q,solution);
+            i=0;
+        }
+    }
+    g_free(solution);
+}
+
+static void drawAll(cairo_t* cr,Queue* q,int size){
+    int* solution=QueuePeekFront(q);
+    if(solution){
+        double tileScaled=(double)TILE_SIZE*DEFAULT_SIZE/size;
+        for(int i=0;i<size;i++){
+            int x=solution[2*i];
+            int y=solution[2*i+1];
+            if(size>=SIZE_COLOUR_LABEL){
+                cairo_set_source_rgba(cr,1.0,0.0,0.0,1.0);
+                cairo_rectangle(cr,y*tileScaled,x*tileScaled,tileScaled,tileScaled);
+                cairo_fill(cr);
+            }
+            if(imgScaled)
+                cairo_set_source_surface(cr,imgScaled,y*tileScaled,x*tileScaled);
+            cairo_paint(cr);
+        }
+    }
+    return;
+}
+
+static void drawOne(cairo_t* cr,FILE* f,int size){
+    double TileSizeScale=(double)TILE_SIZE*DEFAULT_SIZE/(double)(size);
+    int i,j;
+    while(fscanf(f,"%d %d",&i,&j)==2){
+        if(size>=SIZE_COLOUR_LABEL){
+            cairo_save(cr);
+            cairo_set_source_rgba(cr,1.0,0.0,0.0,1.0);
+            cairo_rectangle(cr,j*TileSizeScale,i*TileSizeScale,TileSizeScale,TileSizeScale);
+            cairo_fill(cr);
+            cairo_restore(cr);
+        }
+        if (imgScaled) 
+            cairo_set_source_surface(cr, imgScaled, j * TileSizeScale, i * TileSizeScale);
+        cairo_paint(cr);
+    }
+}
+
+static void onDraw(GtkDrawingArea* area,cairo_t* cr,int width,int height,gpointer userData){
+    dataSolve* data=(dataSolve*)userData;
+    int allFlag=data->flagAll;
+
+    drawBoard(cr,width,height,&(data->size));
+    char* filename=g_object_get_data(G_OBJECT(area),"solution-file");
+    if(filename==NULL)return;
+
+    FILE* f=fopen(filename,"rb");
+    if(!f)return;   
+
+    int size;
+    fscanf(f,"%d",&size);
+
+    if(allFlag==0)
+        drawOne(cr,f,size);
+    else{
+        Queue* q=g_object_get_data(G_OBJECT(area),"solution-queue");
+        if(!q){
+            q=InitQueue(size*2);
+            fillQueue(q,f,size);    
+            g_object_set_data_full(G_OBJECT(area),"solution-queue",q,(GDestroyNotify)QueueFree);
+        }
+        drawAll(cr,q,size);
+    }
+    fclose(f);
 }
 
 //threading
@@ -192,6 +300,7 @@ gpointer SolveThread(gpointer userData) {
     if (test != NULL) {
         fclose(test);
         g_idle_add(reenableButton, data->button);
+        
         free(data);
         return NULL;
     }
@@ -200,6 +309,7 @@ gpointer SolveThread(gpointer userData) {
     if (f == NULL) {
         g_idle_add(reenableButton, data->button);
         free(data);
+        
         return NULL;
     }
     //printing size of a board
@@ -230,7 +340,7 @@ gpointer SolveThread(gpointer userData) {
     fclose(f);
 
     dataDraw* dData=g_new(dataDraw,1);
-    
+        
     dData->board=data->board;
     dData->filename=g_strdup(filename);
 
@@ -380,7 +490,7 @@ static void GetNewFig(GtkWidget* button,dataAdd* data){
             g_object_set_data(G_OBJECT(cell),"grid-row",GINT_TO_POINTER(i));
             g_object_set_data(G_OBJECT(cell),"grid-col",GINT_TO_POINTER(j));
 
-            if(i==CENTER_MOVMENT-1 && j==CENTER_MOVMENT-1){
+            if(i==CENTER_MOVMENT && j==CENTER_MOVMENT){
                 gtk_widget_set_sensitive(cell,FALSE);
                 GtkWidget* img=gtk_image_new_from_icon_name("image-missing");
                 gtk_button_set_child(GTK_BUTTON(cell),img);
@@ -515,54 +625,6 @@ void StartSolve(GtkButton* button, gpointer userData) {
     }
 }
 
-static void drawBoard(cairo_t* cr,int width,int height,gpointer userData){
-    cairo_set_source_rgb(cr,1,1,1);
-    cairo_paint(cr);
-    int* size=(int*)userData;
-    double TileSizeScale=(double)TILE_SIZE*DEFAULT_SIZE/(double)(*size);
-
-    for(int i=0;i<*size;i++){
-        for(int j=0;j<*size;j++){
-            if((i + j) % 2 == 0)
-                cairo_set_source_rgb(cr, 0.94, 0.94, 0.94);
-            else
-                cairo_set_source_rgb(cr, 0.30, 0.30, 0.30);
-            cairo_rectangle(cr,j*TileSizeScale,i*TileSizeScale,TileSizeScale,TileSizeScale);  
-            cairo_fill(cr);  
-        }
-    }
-}
-
-static void onDraw(GtkDrawingArea* area,cairo_t* cr,int width,int height,gpointer userData){
-    drawBoard(cr,width,height,userData);
-
-    char* filename=g_object_get_data(G_OBJECT(area),"solution-file");
-    if(filename==NULL)return;
-    
-    FILE* f=fopen(filename,"rb");
-    if(!f)return;
-
-    int size;
-    fscanf(f,"%d",&size);
-
-    double TileSizeScale=(double)TILE_SIZE*DEFAULT_SIZE/(double)(size);
-
-    int i,j;
-    while(fscanf(f,"%d %d",&i,&j)==2){
-        if(size>=SIZE_COLOUR_LABEL){
-            cairo_save(cr);
-            cairo_set_source_rgba(cr,1.0,0.0,0.0,1.0);
-            cairo_rectangle(cr,j*TileSizeScale,i*TileSizeScale,TileSizeScale,TileSizeScale);
-            cairo_fill(cr);
-            cairo_restore(cr);
-        }
-        if (imgScaled) 
-            cairo_set_source_surface(cr, imgScaled, j * TileSizeScale, i * TileSizeScale);
-        cairo_paint(cr);
-    }
-    fclose(f);
-}
-
 static void onSaveResponse(GObject* source,GAsyncResult* result,gpointer userData){
     dataSolve* data=(dataSolve*)userData;
     GtkFileDialog* dialog=GTK_FILE_DIALOG(source);
@@ -615,6 +677,7 @@ static void onSaveResponse(GObject* source,GAsyncResult* result,gpointer userDat
                 }
                 if (imgScaled) 
                     cairo_set_source_surface(cr, imgScaled, j * TileSizeScale, i * TileSizeScale);
+               
                 cairo_paint(cr);
             }
             fclose(f);
@@ -645,6 +708,34 @@ static void SaveSolution(GtkWidget* button, gpointer userData){
     gtk_file_dialog_set_initial_name(dialog,"board.png");
     gtk_file_dialog_save(dialog,GTK_WINDOW(parent),NULL,onSaveResponse,data);
     g_object_unref(dialog);
+}
+
+static gboolean ExitProg(GtkWidget* button,gpointer userData){
+    GtkRoot* parent=gtk_widget_get_root(button);
+    gtk_window_destroy(GTK_WINDOW(parent));
+    return G_SOURCE_REMOVE;
+}
+
+static void NextSolution(GtkWidget* button,gpointer userData){ 
+    GtkWidget* board=GTK_WIDGET(userData);
+    Queue* q=g_object_get_data(G_OBJECT(board),"solution-queue");
+    if(!q)return;
+
+    int* curSolve=NULL;
+    if(QueuePopFront(q,&curSolve)==0)
+        QueuePushBack(q,curSolve);
+    gtk_widget_queue_draw(board);
+}
+
+static void PrevSolution(GtkWidget* button,gpointer userData){ 
+    GtkWidget* board=GTK_WIDGET(userData);
+    Queue* q=g_object_get_data(G_OBJECT(board),"solution-queue");
+    if(!q)return;
+
+    int* curSolve=NULL;
+    if(QueuePopBack(q,&curSolve)==0)
+        QueuePushFront(q,curSolve);
+    gtk_widget_queue_draw(board);
 }
 
 static void activate(GtkApplication* app, gpointer user_data) {
@@ -697,7 +788,6 @@ static void activate(GtkApplication* app, gpointer user_data) {
 
     gtk_button_set_child(GTK_BUTTON(buttonAdd),imgPlus);
     gtk_widget_set_tooltip_text(buttonAdd,"Add");
-    gtk_box_append(GTK_BOX(boxAddRem),buttonAdd);
     gtk_widget_set_size_request(buttonAdd,WIDTH/2,-1);
     gtk_widget_set_hexpand(buttonAdd, FALSE);
     gtk_widget_set_halign(buttonAdd, GTK_ALIGN_START);
@@ -707,7 +797,6 @@ static void activate(GtkApplication* app, gpointer user_data) {
 
     gtk_button_set_child(GTK_BUTTON(buttonRem),imgRem);
     gtk_widget_set_tooltip_text(buttonRem,"Delete");
-    gtk_box_append(GTK_BOX(boxAddRem),buttonRem);
     gtk_widget_set_size_request(buttonRem,WIDTH/2,-1);
     gtk_widget_set_hexpand(buttonRem, FALSE);
     gtk_widget_set_halign(buttonRem, GTK_ALIGN_START);
@@ -755,7 +844,37 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand(buttonSolve, FALSE);
     gtk_widget_set_halign(buttonSolve, GTK_ALIGN_START);
 
-    GtkWidget* boxSaveExit=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
+    GtkWidget* boxLeft=gtk_box_new(GTK_ORIENTATION_VERTICAL,100);
+    gtk_widget_set_halign(boxLeft, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(boxLeft,GTK_ALIGN_CENTER);
+    gtk_widget_set_hexpand(boxLeft, TRUE);
+    gtk_widget_set_vexpand(boxLeft, TRUE);
+
+    GtkWidget* boxQueue=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,20);
+    gtk_widget_set_halign(boxQueue, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(boxQueue,GTK_ALIGN_CENTER);
+    gtk_widget_set_hexpand(boxQueue, TRUE);
+    gtk_widget_set_vexpand(boxQueue, TRUE);
+    g_object_set_data(G_OBJECT(checkAllSolves),"box-queue",boxQueue);
+
+    GtkWidget* buttonLeft=gtk_button_new();
+    GtkWidget* imgLeft=gtk_image_new_from_icon_name("go-previous-symbolic");
+    gtk_button_set_child(GTK_BUTTON(buttonLeft),imgLeft);
+    gtk_widget_set_size_request(buttonLeft,WIDTH/5,-1);
+    gtk_widget_set_hexpand(buttonLeft, FALSE);
+    gtk_widget_set_halign(buttonLeft, GTK_ALIGN_START);
+
+    GtkWidget* editQueue=gtk_entry_new();
+    gtk_widget_set_hexpand(editQueue,TRUE);
+
+    GtkWidget* buttonRight=gtk_button_new();
+    GtkWidget* imgRight=gtk_image_new_from_icon_name("go-next-symbolic");
+    gtk_button_set_child(GTK_BUTTON(buttonRight),imgRight);
+    gtk_widget_set_size_request(buttonRight,WIDTH/5,-1);
+    gtk_widget_set_hexpand(buttonRight, FALSE);
+    gtk_widget_set_halign(buttonRight, GTK_ALIGN_START);
+
+    GtkWidget* boxSaveExit=gtk_box_new(GTK_ORIENTATION_VERTICAL,50);
     gtk_widget_set_halign(boxSaveExit, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(boxSaveExit,GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand(boxSaveExit, TRUE);
@@ -766,6 +885,12 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand(buttonSave, FALSE);
     gtk_widget_set_halign(buttonSave, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(buttonSave, GTK_ALIGN_CENTER);
+
+    GtkWidget* buttonExit=gtk_button_new_with_label("Exit");
+    gtk_widget_set_size_request(buttonExit,WIDTH,-1);
+    gtk_widget_set_hexpand(buttonExit, FALSE);
+    gtk_widget_set_halign(buttonExit, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(buttonExit, GTK_ALIGN_CENTER);
 
     loadFigure();
     figRescale(DEFAULT_SIZE);
@@ -789,23 +914,37 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_signal_connect(buttonAdd,"clicked",G_CALLBACK(AppendToBox),dataAddfig);
     g_signal_connect(buttonRem,"clicked",G_CALLBACK(RemoveCurFig),dataRemCurFig);
     g_signal_connect(buttonSave,"clicked",G_CALLBACK(SaveSolution),data);
-    gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(board), onDraw,&(data->size),NULL);
+    g_signal_connect(buttonExit,"clicked",G_CALLBACK(ExitProg),NULL);
+    g_signal_connect(buttonRight,"clicked",G_CALLBACK(NextSolution),board);
+    g_signal_connect(buttonLeft,"clicked",G_CALLBACK(PrevSolution),board);
+    gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(board), onDraw,data,g_free);
 
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
     gtk_widget_set_halign(vbox, GTK_ALIGN_START);
     gtk_widget_set_valign(vbox, GTK_ALIGN_CENTER);
 
+    gtk_box_append(GTK_BOX(boxAddRem),buttonAdd);
+    gtk_box_append(GTK_BOX(boxAddRem),buttonRem);
+
+    gtk_box_append(GTK_BOX(boxQueue),buttonLeft);
+    gtk_box_append(GTK_BOX(boxQueue),editQueue);
+    gtk_box_append(GTK_BOX(boxQueue),buttonRight);
+
+    gtk_box_append(GTK_BOX(boxLeft),boxQueue);
+    gtk_box_append(GTK_BOX(boxLeft),boxSaveExit);
+
     gtk_box_append(GTK_BOX(boxSaveExit),buttonSave);
+    gtk_box_append(GTK_BOX(boxSaveExit),buttonExit);
 
     gtk_box_append(GTK_BOX(vbox), scaleN);
     gtk_box_append(GTK_BOX(vbox), box);
-    gtk_box_append(GTK_BOX(vbox),boxAddRem);
+    gtk_box_append(GTK_BOX(vbox), boxAddRem);
     gtk_box_append(GTK_BOX(vbox), checkAllSolves);
     gtk_box_append(GTK_BOX(vbox), buttonSolve);
 
     gtk_box_append(GTK_BOX(mainBox),vbox);
     gtk_box_append(GTK_BOX(mainBox),board);
-    gtk_box_append(GTK_BOX(mainBox),boxSaveExit);
+    gtk_box_append(GTK_BOX(mainBox),boxLeft);
 
     gtk_window_set_child(GTK_WINDOW(window), mainBox);
     gtk_window_fullscreen(GTK_WINDOW(window));
@@ -823,3 +962,4 @@ int main(int argc, char** argv) {
 }
 //this thing makes vscode use compiler that knows i have gtk
 //D:/C_complier/msys2_shell.cmd -ucrt64 -defterm -here -no-start
+//gcc $(pkg-config --cflags gtk4) -o solver kursach.c algorithms.c queue.c  $(pkg-config --libs gtk4) 2>&1 -mwindows
