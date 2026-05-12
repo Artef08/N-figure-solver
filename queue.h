@@ -10,6 +10,7 @@ struct Node{
     Node* prev;
     Node* next;
     int* solve;
+    uint64_t num;
 };
 
 
