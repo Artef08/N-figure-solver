@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <gtk/gtk.h>
 #include <glib.h>
-#include "algoritms.h"
+#include "algorithms.h"
 #include "queue.h"
 
 #define MAX_FIGURES 15
@@ -32,7 +32,6 @@
 #define TILE_SIZE 128
 #define SIZE_COLOUR_LABEL 45
 
-figure test;
 static GMutex file_list_mutex;
 static GList *output_files = NULL;
 gint solve_cancel = 0;
@@ -493,7 +492,8 @@ static void checkInput(GtkButton* button,dataAdd* data){
         gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[*ind]), GTK_CHECK_BUTTON(btns[0]));
         gtk_box_append(GTK_BOX(box), btns[*ind]);
         (*ind)++;
-        g_idle_add(closeWindowIdle, gtk_widget_get_root(GTK_WIDGET(button)));
+        if(data->flagButtonSignal!=0)
+            g_idle_add(closeWindowIdle, gtk_widget_get_root(GTK_WIDGET(button)));
     }
 }
 
@@ -856,6 +856,94 @@ static void PrevSolution(GtkWidget* button,gpointer userData){
     gtk_widget_queue_draw(board);
 }
 
+static void SaveToFile(GtkWidget* button,gpointer userData){
+    dataRem* data=(dataRem*)userData;
+    int n=*(data->ind);
+    GtkWidget** btns=data->btns;
+    figure* figures=data->figures;
+    int sel=-1;
+    for(int i=0;i<n;i++){
+        if(btns[i]&&gtk_check_button_get_active(GTK_CHECK_BUTTON(btns[i]))){
+            sel=i;
+            i=n;
+        }
+    }
+
+    const char* name=gtk_check_button_get_label(GTK_CHECK_BUTTON(btns[sel]));
+    figure curFig=figures[sel];
+    AddFigToFile(curFig,name);
+}
+
+static int checkFileName(char* path){
+    if(!path) return FALSE;
+
+    const char* basename=g_path_get_basename(path);
+    const char* dot=strrchr(basename,'.');
+    if(!dot||dot==basename)
+        return FALSE;
+
+    return (strcmp(dot+1,"fig")==0);    
+}
+
+static void ShowErrorWrongFile(GtkWidget* parent){
+    GtkAlertDialog* dialog=gtk_alert_dialog_new("Wrong file type");
+    gtk_alert_dialog_set_detail(dialog,"Please select a .fig file.");
+    gtk_alert_dialog_set_buttons(dialog,(const char*[]){"OK",NULL});
+    gtk_alert_dialog_show(dialog,GTK_WINDOW(parent));
+    g_object_unref(dialog);
+    return;
+}
+
+static char* GetName(char* path){
+    if(!path)return NULL;
+
+    const char* basename=g_path_get_basename(path);
+    const char* dot=g_strrstr(basename,".");
+
+    if(!dot || dot==basename){
+        return g_strdup(basename);
+    }
+    return g_strndup(basename,dot-basename);
+}
+
+static void openDialogFig(GObject* source,GAsyncResult* result,gpointer userData){
+    GError* error=NULL;
+    GtkFileDialog* dialog=GTK_FILE_DIALOG(source);
+    GFile* file=gtk_file_dialog_open_finish(dialog,result,&error);
+    GtkWidget* parent=g_object_get_data(source,"parent-window");
+
+    if(error)return;
+
+    dataAdd* data=(dataAdd*)userData;
+    data->flagButtonSignal=0;
+    if(file){
+        gchar* path=g_file_get_path(file);
+        if(!checkFileName(path)){
+            ShowErrorWrongFile(parent);
+            return;
+        }
+        data->newFig=AddFigure(path);
+        data->name=GetName(path);
+        checkInput(GTK_BUTTON(parent),data);
+        data->flagButtonSignal=1;
+    }
+}
+
+static void onPressAddFromFile(GtkWidget* button,gpointer userData){
+    GtkWidget* window=GTK_WIDGET(gtk_widget_get_root(button));
+    GtkFileDialog* dialog=gtk_file_dialog_new();
+
+    g_object_set_data(G_OBJECT(dialog), "parent-window", window);
+    gtk_file_dialog_set_title(dialog,"Open file");
+    gtk_file_dialog_set_modal(dialog,TRUE);
+
+    dataAdd* data=(dataAdd*)userData;
+
+    gtk_file_dialog_open(dialog,GTK_WINDOW(window),NULL,openDialogFig,data);
+
+    data->flagButtonSignal=1;
+}
+
 static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget* mainBox=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,150);
     gtk_widget_set_halign(mainBox,GTK_ALIGN_CENTER);
@@ -934,14 +1022,21 @@ static void activate(GtkApplication* app, gpointer user_data) {
     AppendToBox(GTK_BUTTON(buttonAdd),dataAddfig);                                    //magaraga adding
     
     g_free(dataAddfig->name);
-    dataAddfig->name=g_strdup("rooknight");
-    dataAddfig->newFig=test;
 
-    AppendToBox(GTK_BUTTON(buttonAdd),dataAddfig);          //testing of files adding
-
-    g_free(dataAddfig->name);
     dataAddfig->name=g_strdup("");
     dataAddfig->flagButtonSignal=1;
+
+    GtkWidget* boxFile=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
+
+    GtkWidget* buttonAddFile= gtk_button_new_with_label("Add figure from a file");
+    gtk_widget_set_size_request(buttonAddFile,WIDTH,-1);
+    gtk_widget_set_hexpand(buttonAddFile, FALSE);
+    gtk_widget_set_halign(buttonAddFile, GTK_ALIGN_START);
+
+    GtkWidget* buttonSaveFile=gtk_button_new_with_label("Save figure to a file");
+    gtk_widget_set_size_request(buttonSaveFile,WIDTH,-1);
+    gtk_widget_set_hexpand(buttonSaveFile, FALSE);
+    gtk_widget_set_halign(buttonSaveFile, GTK_ALIGN_START);
 
     GtkWidget* scaleN = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,1.0,(double)MAX_SIZE_ALL,1.0);
     gtk_range_set_value(GTK_RANGE(scaleN),(double)DEFAULT_SIZE);
@@ -1046,6 +1141,8 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_signal_connect(buttonExit,"clicked",G_CALLBACK(ExitProg),NULL);
     g_signal_connect(buttonRight,"clicked",G_CALLBACK(NextSolution),board);
     g_signal_connect(buttonLeft,"clicked",G_CALLBACK(PrevSolution),board);
+    g_signal_connect(buttonSaveFile,"clicked",G_CALLBACK(SaveToFile),dataRemCurFig);
+    g_signal_connect(buttonAddFile,"clicked",G_CALLBACK(onPressAddFromFile),dataAddfig);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(board),onDraw,data,g_free);
 
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
@@ -1067,9 +1164,13 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_box_append(GTK_BOX(boxSaveExit),buttonSave);
     gtk_box_append(GTK_BOX(boxSaveExit),buttonExit);
 
+    gtk_box_append(GTK_BOX(boxFile), buttonSaveFile);
+    gtk_box_append(GTK_BOX(boxFile), buttonAddFile);
+
     gtk_box_append(GTK_BOX(vbox), scaleN);
     gtk_box_append(GTK_BOX(vbox), box);
     gtk_box_append(GTK_BOX(vbox), boxAddRem);
+    gtk_box_append(GTK_BOX(vbox), boxFile);
     gtk_box_append(GTK_BOX(vbox), checkAllSolves);
     gtk_box_append(GTK_BOX(vbox), buttonSolve);
 
@@ -1084,7 +1185,6 @@ static void activate(GtkApplication* app, gpointer user_data) {
 }
 
 int main(int argc, char** argv) {
-    test = AddFigure("rooknight.fig");
     GtkApplication* app = gtk_application_new("com.N-piece-Solver", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(activate), NULL);
     int status = g_application_run(G_APPLICATION(app), argc, argv);

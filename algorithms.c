@@ -4,7 +4,7 @@
 #include <time.h>
 #include <errno.h>
 #include <gtk/gtk.h>
-#include "algoritms.h"
+#include "algorithms.h"
 
 #define CENTER_MOVMENT 4    //constant for center of special movement(knight-like for example) 
 #define INF_MOVEMENT_SZ 4   //size of array with flags of infinite movements
@@ -432,3 +432,21 @@ figure AddFigure(char* filename){
     fclose(fig);
     return newfig;
 }
+
+void AddFigToFile(figure fig,const char* name){
+    char filename[128];
+    snprintf(filename, sizeof(filename),"Figures\\%s.fig",name);
+    FILE* f=fopen(filename,"wb");
+    fprintf(f,"%c\n",fig.name);
+    for(int i=0;i<INF_MOVEMENT_SZ;i++){
+        fprintf(f,"%d ",fig.inf_movement[i]);
+    }
+    fprintf(f,"\n");
+    for(int i=0;i<SP_MOVEMENT_SZ;i++){
+        for(int j=0;j<SP_MOVEMENT_SZ;j++){
+            fprintf(f,"%d ",fig.special_movement[i][j]);
+        }
+        fprintf(f,"\n");
+    }
+    fclose(f);
+}  
