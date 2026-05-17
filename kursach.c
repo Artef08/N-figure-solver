@@ -459,8 +459,8 @@ void showErrorNameExists(GtkButton* button){
     gtk_alert_dialog_show(dialog,parent);
 }
 
-static gboolean closeWindowIdle(gpointer user_data) {
-    GtkWindow *win = GTK_WINDOW(user_data);
+static gboolean closeWindowIdle(gpointer userData) {
+    GtkWindow *win = GTK_WINDOW(userData);
     gtk_window_destroy(win);
     return G_SOURCE_REMOVE;
 }
@@ -532,15 +532,19 @@ static void gridToggled(GtkToggleButton *btn, gpointer user_data) {
     data->newFig.special_movement[r][c] = active ? TRUE : FALSE;
 }
 
+static void onDestroyAddFig(GtkWindow* parent,gpointer userData){
+    GtkWidget* mainBox=GTK_WIDGET(userData);
+    gtk_widget_set_sensitive(mainBox,TRUE);
+}
+
 static void GetNewFig(GtkWidget* button,dataAdd* data){
     GtkWindow *parent = GTK_WINDOW(gtk_widget_get_root(GTK_WIDGET(button)));
+    GtkWidget* mainBox=g_object_get_data(G_OBJECT(button),"main-box");
 
     GtkWidget *newWind = gtk_window_new();
     gtk_window_set_title(GTK_WINDOW(newWind),"Adding a figure");
     gtk_window_set_default_size(GTK_WINDOW(newWind),ADDING_WIND_HORZ,ADDING_WIND_VERT);
     gtk_window_set_resizable(GTK_WINDOW(newWind), FALSE);
-    gtk_window_set_transient_for(GTK_WINDOW(newWind),parent);
-    gtk_window_set_modal(GTK_WINDOW(newWind),TRUE);
 
     data->newFig=InitEmpty();
     GtkWidget* vbox=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
@@ -605,11 +609,13 @@ static void GetNewFig(GtkWidget* button,dataAdd* data){
 
     GtkWidget* buttonReady = gtk_button_new_with_label("Add figure");
     g_signal_connect(buttonReady, "clicked", G_CALLBACK(checkInput),data);
+    g_signal_connect(newWind,"destroy",G_CALLBACK(onDestroyAddFig),mainBox);
     gtk_box_append(GTK_BOX(vbox),entry);
     gtk_box_append(GTK_BOX(vbox),boxCheckbuttons);
     gtk_box_append(GTK_BOX(vbox),grid);
     gtk_box_append(GTK_BOX(vbox),buttonReady);
     gtk_window_set_child(GTK_WINDOW(newWind),vbox);
+    gtk_widget_set_sensitive(mainBox,FALSE);
     gtk_window_present(GTK_WINDOW(newWind));
 }
 
@@ -997,6 +1003,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_size_request(buttonAdd,WIDTH/2,-1);
     gtk_widget_set_hexpand(buttonAdd, FALSE);
     gtk_widget_set_halign(buttonAdd, GTK_ALIGN_START);
+    g_object_set_data(G_OBJECT(buttonAdd),"main-box",mainBox);
 
     GtkWidget* buttonRem = gtk_button_new();
     GtkWidget* imgRem = gtk_image_new_from_icon_name("edit-delete");
