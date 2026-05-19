@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <gtk/gtk.h>
 #include <glib.h>
+#include <ctype.h>
 #include "algorithms.h"
 #include "queue.h"
 
@@ -150,6 +151,9 @@ static void SizeChange(GtkRange* scaleN, gpointer userData){
     gtk_widget_set_opacity(labelSolutions,0.0);
     GtkWidget* labelNum=g_object_get_data(G_OBJECT(scaleN),"hide-num-solve-label");
     gtk_widget_set_opacity(labelNum,0.0);
+    GtkWidget* buttonGo=g_object_get_data(G_OBJECT(scaleN),"hide-on-change");
+    gtk_widget_set_opacity(buttonGo,0.0);
+    gtk_widget_set_sensitive(buttonGo,FALSE);
     figRescale(data->size);
     gtk_widget_queue_draw(data->board);
 }
@@ -161,6 +165,9 @@ static void toggleSolves(GtkToggleButton* checkAll,gpointer userData){
     gtk_widget_set_opacity(label,0.0);
     GtkWidget* labelNum=g_object_get_data(G_OBJECT(scale),"hide-num-solve-label");
     gtk_widget_set_opacity(labelNum,0.0);
+    GtkWidget* buttonGo=g_object_get_data(G_OBJECT(scale),"hide-on-change");
+    gtk_widget_set_opacity(buttonGo,0.0);
+    gtk_widget_set_sensitive(buttonGo,FALSE);
     GtkWidget* boxQueue=g_object_get_data(G_OBJECT(checkAll),"box-queue");
     //here we adjusting max size so if we choose 80 and switch to all solves it will change to max
     if(scale){
@@ -341,6 +348,13 @@ uint64_t SolNumbersF(char* filename){
     return x;
 }
 
+static gboolean ShowButtonGo(gpointer userData){
+    GtkWidget* buttonGo=GTK_WIDGET(userData);
+    gtk_widget_set_opacity(buttonGo,1.0);
+    gtk_widget_set_sensitive(buttonGo,TRUE);
+    return G_SOURCE_REMOVE;
+}
+
 //threading
 gpointer SolveThread(gpointer userData) {
     SolveThreadData* data = (SolveThreadData*)userData;
@@ -377,6 +391,10 @@ gpointer SolveThread(gpointer userData) {
             lDataNum->solves=1;
 
             g_idle_add(ChangeLabelNum,lDataNum);
+
+            GtkWidget* buttonGo=g_object_get_data(G_OBJECT(data->button),"show-on-solve");
+
+            g_idle_add(ShowButtonGo,buttonGo);
         }
         
         dataDraw* dData=g_new(dataDraw,1);
@@ -423,6 +441,8 @@ gpointer SolveThread(gpointer userData) {
         lDataNum->label=labelNum;
         lDataNum->solves=1;
         g_idle_add(ChangeLabelNum,lDataNum);
+        GtkWidget* buttonGo=g_object_get_data(G_OBJECT(data->button),"show-on-solve");
+        g_idle_add(ShowButtonGo,buttonGo);
         FreeBoard(board, data->size);
         wasCancelled = g_atomic_int_get(&solve_cancel);
         if (wasCancelled)
@@ -950,6 +970,35 @@ static void onPressAddFromFile(GtkWidget* button,gpointer userData){
     data->flagButtonSignal=1;
 }
 
+static void changeNum(GtkEditable* entry,gpointer userData){
+    uint64_t* Number=(uint64_t*)userData;
+    const gchar* text=gtk_editable_get_text(entry);
+    gboolean hasNonDigit=FALSE;
+    for(int i=0;text[i]!='\0';i++){
+        if(!g_ascii_isdigit(text[i])){
+            hasNonDigit=TRUE;
+            break;
+        }
+    }
+    if(!hasNonDigit)return;
+    
+    gchar* newText=g_strdup(text);
+    for(int i=0;newText[i]!='\0';i++){
+        if(!g_ascii_isdigit(newText[i])){
+            newText[i]='\0';
+            break;
+        }
+        }
+    g_signal_handlers_block_by_func(entry,changeNum,Number);
+    gtk_editable_set_text(entry,newText);
+    gtk_editable_set_position(entry,-1);
+    g_signal_handlers_unblock_by_func(entry,changeNum,Number);
+    
+    *Number=g_ascii_strtoll(newText,NULL,10);
+
+    g_free(newText);
+}
+
 static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget* mainBox=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,150);
     gtk_widget_set_halign(mainBox,GTK_ALIGN_CENTER);
@@ -1080,6 +1129,14 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_object_set_data(G_OBJECT(buttonSolve),"label-num-solve",labelNumSolve);
     g_object_set_data(G_OBJECT(scaleN),"hide-num-solve-label",labelNumSolve);
 
+    GtkWidget* buttonGo=gtk_button_new_with_label("Go to solution");
+    gtk_widget_set_size_request(buttonGo,WIDTH,-1);
+    gtk_widget_set_hexpand(buttonGo, FALSE);
+    gtk_widget_set_halign(buttonGo, GTK_ALIGN_CENTER);
+    gtk_widget_set_opacity(buttonGo,0.0);
+    g_object_set_data(G_OBJECT(buttonSolve),"show-on-solve",buttonGo);
+    g_object_set_data(G_OBJECT(scaleN),"hide-on-change",buttonGo);
+
     GtkWidget* boxQueue=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,20);
     gtk_widget_set_halign(boxQueue, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(boxQueue,GTK_ALIGN_CENTER);
@@ -1094,8 +1151,11 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand(buttonLeft, FALSE);
     gtk_widget_set_halign(buttonLeft, GTK_ALIGN_START);
 
+    uint64_t Number;
+
     GtkWidget* editQueue=gtk_entry_new();
     gtk_widget_set_hexpand(editQueue,TRUE);
+    gtk_entry_set_max_length(GTK_ENTRY(editQueue),8);
 
     GtkWidget* buttonRight=gtk_button_new();
     GtkWidget* imgRight=gtk_image_new_from_icon_name("go-next-symbolic");
@@ -1150,6 +1210,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_signal_connect(buttonLeft,"clicked",G_CALLBACK(PrevSolution),board);
     g_signal_connect(buttonSaveFile,"clicked",G_CALLBACK(SaveToFile),dataRemCurFig);
     g_signal_connect(buttonAddFile,"clicked",G_CALLBACK(onPressAddFromFile),dataAddfig);
+    g_signal_connect(editQueue,"changed",G_CALLBACK(changeNum),&Number);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(board),onDraw,data,g_free);
 
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
@@ -1163,9 +1224,10 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_box_append(GTK_BOX(boxQueue),editQueue);
     gtk_box_append(GTK_BOX(boxQueue),buttonRight);
 
+    gtk_box_append(GTK_BOX(boxLeft),boxQueue);
     gtk_box_append(GTK_BOX(boxLeft),labelSolutions);
     gtk_box_append(GTK_BOX(boxLeft),labelNumSolve);
-    gtk_box_append(GTK_BOX(boxLeft),boxQueue);
+    gtk_box_append(GTK_BOX(boxLeft),buttonGo);
     gtk_box_append(GTK_BOX(boxLeft),boxSaveExit);
 
     gtk_box_append(GTK_BOX(boxSaveExit),buttonSave);
