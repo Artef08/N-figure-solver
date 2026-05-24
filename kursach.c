@@ -80,7 +80,7 @@ typedef struct{
 
 typedef struct{
     GtkWidget* label;
-    uint64_t solves;
+    uint64_t* solves;
 } labelData;
 
 static void figRescale(int size){
@@ -307,7 +307,7 @@ static void onDraw(GtkDrawingArea* area,cairo_t* cr,int width,int height,gpointe
 static gboolean ChangeLabel(gpointer userData){
     labelData* lData=(labelData*)userData;
     GtkWidget* label=lData->label;
-    uint64_t solves=lData->solves;
+    uint64_t solves=*(lData->solves);
     gtk_widget_set_opacity(label,1.0);
     if(solves==0)
         gtk_label_set_text(GTK_LABEL(label),"No solutions found");
@@ -316,6 +316,7 @@ static gboolean ChangeLabel(gpointer userData){
         gtk_label_set_text(GTK_LABEL(label),text);
         g_free(text);
     }
+    g_free(lData->solves);
     g_free(lData);
     return G_SOURCE_REMOVE;
 }
@@ -323,10 +324,11 @@ static gboolean ChangeLabel(gpointer userData){
 static gboolean ChangeLabelNum(gpointer userData){
     labelData* lData=(labelData*)userData;
     GtkWidget* label=lData->label;
-    uint64_t solveNum=lData->solves;
+    uint64_t solveNum=*(lData->solves);
     gtk_widget_set_opacity(label,1.0);
     char* text=g_strdup_printf("Solution №%llu",solveNum);
     gtk_label_set_text(GTK_LABEL(label),text);
+    g_free(lData->solves);
     g_free(lData);
     g_free(text);
     return G_SOURCE_REMOVE;
@@ -342,7 +344,7 @@ uint64_t SolNumbersF(char* filename){
         return 0;
     }
 
-    uint64_t x;
+    uint64_t x=0;
     while(fscanf(f,"%llu",&x)==1);
     fclose(f);
     return x;
@@ -376,7 +378,8 @@ gpointer SolveThread(gpointer userData) {
         if(data->flag==1){
             labelData* lData=g_new(labelData,1);
 
-            uint64_t solves=SolNumbersF(filename);
+            uint64_t* solves=g_new(uint64_t,1);
+            *solves=SolNumbersF(filename);
             GtkWidget* label=g_object_get_data(G_OBJECT(data->button),"label-solutions");
             
             lData->label=label;
@@ -388,7 +391,9 @@ gpointer SolveThread(gpointer userData) {
             labelData* lDataNum=g_new(labelData,1);
 
             lDataNum->label=labelNum;
-            lDataNum->solves=1;
+            uint64_t* dummy=g_new(uint64_t,1);
+            *dummy=1;
+            lDataNum->solves=dummy;
 
             g_idle_add(ChangeLabelNum,lDataNum);
 
@@ -427,11 +432,12 @@ gpointer SolveThread(gpointer userData) {
         GtkWidget* button=data->button;
         GtkWidget* label=g_object_get_data(G_OBJECT(button),"label-solutions");
         GtkWidget* labelNum=g_object_get_data(G_OBJECT(button),"label-num-solve");
-        uint64_t solves=0;
+        uint64_t* solves=g_new(uint64_t,1);
+        *solves=0;
         if (data->fig.inf_movement[HORZ_MOVEMENT]) {
-            solves=solveRowByRow(f, board, data->fig, data->size, 0);
+            *solves=solveRowByRow(f, board, data->fig, data->size, 0);
         } else {
-            solves=solveAll(f, board, data->fig, data->size, 0, 0);
+            *solves=solveAll(f, board, data->fig, data->size, 0, 0);
         }
         labelData* lData=g_new(labelData,1);
         lData->label=label;
@@ -439,7 +445,9 @@ gpointer SolveThread(gpointer userData) {
         g_idle_add(ChangeLabel,lData);
         labelData* lDataNum=g_new(labelData,1);
         lDataNum->label=labelNum;
-        lDataNum->solves=1;
+        uint64_t* dummy=g_new(uint64_t,1);
+        *dummy=1;
+        lDataNum->solves=dummy;
         g_idle_add(ChangeLabelNum,lDataNum);
         GtkWidget* buttonGo=g_object_get_data(G_OBJECT(data->button),"show-on-solve");
         g_idle_add(ShowButtonGo,buttonGo);
@@ -853,7 +861,8 @@ static void NextSolution(GtkWidget* button,gpointer userData){
         QueuePushBack(q,curSolve);
         q->tail->num=curSolveNum;
     }
-    uint64_t solNumber=q->front->num;
+    uint64_t* solNumber=g_new(uint64_t,1);
+    *solNumber=q->front->num;
     GtkWidget* label=g_object_get_data(G_OBJECT(board),"label-num");
     labelData* lData=g_new(labelData,1);
     lData->label=label;
@@ -873,7 +882,8 @@ static void PrevSolution(GtkWidget* button,gpointer userData){
         QueuePushFront(q,curSolve);
         q->front->num=curSolveNum;
     }
-    uint64_t solNumber=q->front->num;
+    uint64_t* solNumber=g_new(uint64_t,1);
+    *solNumber=q->front->num;
     GtkWidget* label=g_object_get_data(G_OBJECT(board),"label-num");
     labelData* lData=g_new(labelData,1);
     lData->label=label;
@@ -980,8 +990,10 @@ static void changeNum(GtkEditable* entry,gpointer userData){
             break;
         }
     }
-    if(!hasNonDigit)return;
-    
+    if(!hasNonDigit){
+        *Number=g_ascii_strtoll(text,NULL,10);
+        return;
+    }
     gchar* newText=g_strdup(text);
     for(int i=0;newText[i]!='\0';i++){
         if(!g_ascii_isdigit(newText[i])){
@@ -997,6 +1009,66 @@ static void changeNum(GtkEditable* entry,gpointer userData){
     *Number=g_ascii_strtoll(newText,NULL,10);
 
     g_free(newText);
+}
+
+static void goToSolution(GtkWidget* button,gpointer userData){
+    labelData* data=(labelData*)userData;
+    GtkWidget* board=data->label;
+    uint64_t solution=*(data->solves);
+    if(solution==0)return;
+    Queue* q=g_object_get_data(G_OBJECT(board),"solution-queue");
+
+    if(!q || !q->front)return;
+    
+    uint64_t current=q->front->num;
+    if(current==solution)return;
+
+    int flagCycle=FALSE;
+
+    uint64_t steps;
+    if(solution<current){
+        steps=current-solution;
+        for(uint64_t i=0;i<steps;i++){
+            uint64_t curSolve=q->tail->num;
+            int* coords=NULL;
+            if(QueuePopBack(q,&coords)!=0)return;
+            if(QueuePushFront(q,coords)!=0)return;
+            if(q->front)q->front->num=curSolve;
+        }
+    }else{
+        steps=solution-current;
+        uint64_t curSolve;
+        for(uint64_t i=0;i<steps;i++){
+            curSolve=q->front->num;
+            if(curSolve==1 && i!=0){
+                flagCycle=TRUE;
+                break;
+            }
+            int* coords=NULL;
+            if(QueuePopFront(q,&coords)!=0)return;
+            if(QueuePushBack(q,coords)!=0)return;
+            if(q->tail)q->tail->num=curSolve;
+        }
+        curSolve=q->front->num;
+        if(curSolve==1)flagCycle=TRUE;
+    }
+
+    if(flagCycle==TRUE){
+        uint64_t curSolve=q->tail->num;
+        int* coords=NULL;   
+        if(QueuePopBack(q,&coords)==0){
+            QueuePushFront(q,coords);
+            q->front->num=curSolve;
+        } 
+    }
+
+    GtkWidget* label=g_object_get_data(G_OBJECT(board),"label-num");
+    labelData* lData=g_new(labelData,1);
+    lData->label=label;
+    lData->solves=g_new(uint64_t,1);
+    *(lData->solves)=q->front->num;
+    ChangeLabelNum(lData);
+    gtk_widget_queue_draw(board);
 }
 
 static void activate(GtkApplication* app, gpointer user_data) {
@@ -1151,7 +1223,9 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand(buttonLeft, FALSE);
     gtk_widget_set_halign(buttonLeft, GTK_ALIGN_START);
 
-    uint64_t Number;
+    uint64_t* dummy=g_new(uint64_t,1);
+    *dummy=0;
+    uint64_t* Number=dummy;
 
     GtkWidget* editQueue=gtk_entry_new();
     gtk_widget_set_hexpand(editQueue,TRUE);
@@ -1194,6 +1268,10 @@ static void activate(GtkApplication* app, gpointer user_data) {
     data->size = DEFAULT_SIZE;
     data->board=board;
 
+    labelData* dataGo=g_new(labelData,1);
+    dataGo->label=board;
+    dataGo->solves=Number;
+
     gtk_widget_set_size_request(board, DEFAULT_SIZE * TILE_SIZE, DEFAULT_SIZE * TILE_SIZE);
 
     g_object_set_data(G_OBJECT(buttonSolve),"board",board);
@@ -1210,7 +1288,8 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_signal_connect(buttonLeft,"clicked",G_CALLBACK(PrevSolution),board);
     g_signal_connect(buttonSaveFile,"clicked",G_CALLBACK(SaveToFile),dataRemCurFig);
     g_signal_connect(buttonAddFile,"clicked",G_CALLBACK(onPressAddFromFile),dataAddfig);
-    g_signal_connect(editQueue,"changed",G_CALLBACK(changeNum),&Number);
+    g_signal_connect(editQueue,"changed",G_CALLBACK(changeNum),Number);
+    g_signal_connect(buttonGo,"clicked",G_CALLBACK(goToSolution),dataGo);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(board),onDraw,data,g_free);
 
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
