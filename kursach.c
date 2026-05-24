@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include "algorithms.h"
 #include "queue.h"
+#include "math.h"
 
 #define MAX_FIGURES 15
 
@@ -158,6 +159,26 @@ static void SizeChange(GtkRange* scaleN, gpointer userData){
     gtk_widget_queue_draw(data->board);
 }
 
+static void updateScaleMax(GtkWidget* scale,dataSolve* data){
+    int ind=0;
+    for(int i=0;i<MAX_FIGURES;i++){
+        if(data->btns[i]&&gtk_check_button_get_active(GTK_CHECK_BUTTON(data->btns[i]))){
+            ind=i;
+            break;
+        }
+    }
+    figure curFig=data->figures[ind];
+    int newMax=computeMaxSize(curFig);
+    GtkAdjustment* adj=gtk_range_get_adjustment(GTK_RANGE(scale));
+    gtk_adjustment_set_upper(adj,(double)newMax);
+
+    double old=gtk_adjustment_get_value(adj);
+    if(old>newMax){
+        gtk_adjustment_set_value(adj,newMax);
+    }
+    data->size=(int)gtk_adjustment_get_value(adj);
+}
+
 static void toggleSolves(GtkToggleButton* checkAll,gpointer userData){
     dataSolve* data=(dataSolve*)userData;
     GtkWidget* scale=g_object_get_data(G_OBJECT(checkAll),"scale");
@@ -171,18 +192,21 @@ static void toggleSolves(GtkToggleButton* checkAll,gpointer userData){
     GtkWidget* boxQueue=g_object_get_data(G_OBJECT(checkAll),"box-queue");
     //here we adjusting max size so if we choose 80 and switch to all solves it will change to max
     if(scale){
-        double new_max=gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll))? (double)MAX_SIZE_ALL : (double)MAX_SIZE_ONE;
-        GtkAdjustment* adj=gtk_range_get_adjustment(GTK_RANGE(scale));
-        double old_value = gtk_adjustment_get_value(adj);
-        gtk_adjustment_set_upper(adj,new_max);
-        if(old_value>new_max){
-            gtk_adjustment_set_value(adj, new_max);
+        if(gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll))){
+            updateScaleMax(scale,data);
+        }else{
+            double new_max=(double)MAX_SIZE_ONE;
+            GtkAdjustment* adj=gtk_range_get_adjustment(GTK_RANGE(scale));
+            double old_value = gtk_adjustment_get_value(adj);
+            gtk_adjustment_set_upper(adj,new_max);
+            if(old_value>new_max){
+                gtk_adjustment_set_value(adj, new_max);
+            }
         }
         data->flagAll=gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll))? TRUE:FALSE;
         gboolean all = gtk_check_button_get_active(GTK_CHECK_BUTTON(checkAll));
         gtk_widget_set_opacity(boxQueue, all ? 1.0 : 0.0); 
         gtk_widget_set_sensitive(boxQueue, all); 
-        data->size = (int)gtk_adjustment_get_value(adj);
     }
 }
 
@@ -456,7 +480,7 @@ gpointer SolveThread(gpointer userData) {
         if (wasCancelled)
             fprintf(f, "Search cancelled\n");
         else
-            fprintf(f,"%llu",solves);
+            fprintf(f,"%llu",*solves);
     } else {
         solveLocalConflicts(f, data->fig, data->size, INF);
         wasCancelled = g_atomic_int_get(&solve_cancel);
@@ -493,6 +517,14 @@ static gboolean closeWindowIdle(gpointer userData) {
     return G_SOURCE_REMOVE;
 }
 
+static void onFigureChange(GtkWidget* button,gpointer userData){
+    GtkWidget* scale=(GtkWidget*)userData;
+    dataSolve* data=g_object_get_data(G_OBJECT(scale),"solve-data");
+
+    if(!gtk_check_button_get_active(GTK_CHECK_BUTTON(button))||data->flagAll!=1)return;
+    updateScaleMax(scale,data);
+}
+
 static void checkInput(GtkButton* button,dataAdd* data){
     GtkWidget** btns=data->btns;
     const char* name=data->name;
@@ -514,9 +546,12 @@ static void checkInput(GtkButton* button,dataAdd* data){
         int* ind=data->ind;
         fig.name=name[0];
 
+        GtkWidget* scale=g_object_get_data(G_OBJECT(box),"scale-change");
+
         figures[*ind] = fig;
         btns[*ind] = gtk_check_button_new_with_label(name);
         g_object_set_data_full(G_OBJECT(btns[*ind]), "fig-name",g_strdup(name), g_free);
+        g_signal_connect(btns[*ind],"toggled",G_CALLBACK(onFigureChange),scale);
         gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[*ind]), GTK_CHECK_BUTTON(btns[0]));
         gtk_box_append(GTK_BOX(box), btns[*ind]);
         (*ind)++;
@@ -673,9 +708,12 @@ static void AppendToBox(GtkButton* button,gpointer userData) {
         int* ind = data->ind;
         const char* name = data->name;
 
+        GtkWidget* scale=g_object_get_data(G_OBJECT(box),"scale-change");
+
         figures[*ind] = data->newFig;
         btns[*ind] = gtk_check_button_new_with_label(name);
         g_object_set_data_full(G_OBJECT(btns[*ind]), "fig-name",g_strdup(name), g_free);
+        g_signal_connect(btns[*ind],"toggled",G_CALLBACK(onFigureChange),scale);
         gtk_check_button_set_group(GTK_CHECK_BUTTON(btns[*ind]),GTK_CHECK_BUTTON(btns[0]));
         gtk_box_append(GTK_BOX(box), btns[*ind]);
         (*ind)++;
@@ -1144,7 +1182,17 @@ static void activate(GtkApplication* app, gpointer user_data) {
     dataRemCurFig->figures=figures;
     dataRemCurFig->ind=lastInd;
 
-    dataAddfig->name=g_strdup("magaraga");
+    GtkWidget* scaleN = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,1.0,(double)MAX_SIZE_ALL,1.0);
+    gtk_range_set_value(GTK_RANGE(scaleN),(double)DEFAULT_SIZE);
+    gtk_widget_set_tooltip_text(scaleN,"Amount of figures");
+    gtk_scale_set_draw_value(GTK_SCALE(scaleN), TRUE);
+    gtk_scale_set_value_pos(GTK_SCALE(scaleN), GTK_POS_BOTTOM);
+    gtk_widget_set_size_request(scaleN, WIDTH, -1);
+    gtk_widget_set_hexpand(scaleN, FALSE);
+    gtk_widget_set_halign(scaleN, GTK_ALIGN_START);
+    g_object_set_data(G_OBJECT(box),"scale-change",scaleN);
+
+    dataAddfig->name=g_strdup("Amazon");
     dataAddfig->newFig=InitMagarg();
 
     AppendToBox(GTK_BUTTON(buttonAdd),dataAddfig);                                    //magaraga adding
@@ -1165,15 +1213,6 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_size_request(buttonSaveFile,WIDTH,-1);
     gtk_widget_set_hexpand(buttonSaveFile, FALSE);
     gtk_widget_set_halign(buttonSaveFile, GTK_ALIGN_START);
-
-    GtkWidget* scaleN = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,1.0,(double)MAX_SIZE_ALL,1.0);
-    gtk_range_set_value(GTK_RANGE(scaleN),(double)DEFAULT_SIZE);
-    gtk_widget_set_tooltip_text(scaleN,"Amount of figures");
-    gtk_scale_set_draw_value(GTK_SCALE(scaleN), TRUE);
-    gtk_scale_set_value_pos(GTK_SCALE(scaleN), GTK_POS_BOTTOM);
-    gtk_widget_set_size_request(scaleN, WIDTH, -1);
-    gtk_widget_set_hexpand(scaleN, FALSE);
-    gtk_widget_set_halign(scaleN, GTK_ALIGN_START);
 
     GtkWidget* checkAllSolves = gtk_check_button_new_with_label("All solutions");
     gtk_check_button_set_active(GTK_CHECK_BUTTON(checkAllSolves), TRUE);
@@ -1268,6 +1307,8 @@ static void activate(GtkApplication* app, gpointer user_data) {
     data->size = DEFAULT_SIZE;
     data->board=board;
 
+    g_object_set_data(G_OBJECT(scaleN),"solve-data",data);
+
     labelData* dataGo=g_new(labelData,1);
     dataGo->label=board;
     dataGo->solves=Number;
@@ -1277,6 +1318,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_object_set_data(G_OBJECT(buttonSolve),"board",board);
     g_object_set_data(G_OBJECT(board),"label-num",labelNumSolve);
 
+    g_signal_connect(btns[0],"toggled",G_CALLBACK(onFigureChange),scaleN);
     g_signal_connect(checkAllSolves, "toggled", G_CALLBACK(toggleSolves), data);
     g_signal_connect(scaleN, "value-changed", G_CALLBACK(SizeChange), data);
     g_signal_connect(buttonSolve, "clicked", G_CALLBACK(StartSolve), data);
@@ -1341,4 +1383,4 @@ int main(int argc, char** argv) {
 }
 //this thing makes vscode use compiler that knows i have gtk
 //D:/C_complier/msys2_shell.cmd -ucrt64 -defterm -here -no-start
-//gcc $(pkg-config --cflags gtk4) -o solver kursach.c algorithms.c queue.c  $(pkg-config --libs gtk4) 2>&1 -mwindows
+//gcc $(pkg-config --cflags gtk4) -o solver kursach.c algorithms.c queue.c math.c $(pkg-config --libs gtk4) 2>&1 -mwindows

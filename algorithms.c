@@ -6,14 +6,6 @@
 #include <gtk/gtk.h>
 #include "algorithms.h"
 
-#define CENTER_MOVMENT 4    //constant for center of special movement(knight-like for example) 
-#define INF_MOVEMENT_SZ 4   //size of array with flags of infinite movements
-#define SP_MOVEMENT_SZ 9    //and matrix of special movements
-#define VERT_MOVEMENT 0     //names for flags
-#define HORZ_MOVEMENT 1
-#define MAIN_DIAG 2
-#define OTHER_DIAG 3
-
 extern gint solve_cancel;
 
 figure InitQueen(){
