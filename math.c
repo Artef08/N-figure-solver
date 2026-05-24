@@ -2,12 +2,12 @@
 #include "math.h"
 
 #define CONST0 1
-#define CONST1 9
-#define CONST2 13
+#define CONST1 6
+#define CONST2 14
 #define CONST3 16
 #define MAX_SIZE 30
 #define MAX_LOWER_CONSTR 1
-#define MAX_HIGHER_CONSTR 12
+#define MAX_HIGHER_CONSTR 8
 
 int countSpMoves(figure fig){
     int count=0;
@@ -21,7 +21,7 @@ int countSpMoves(figure fig){
 }
 
 int computeMaxSize(figure fig){
-    const double w=0.3;
+    const double w=0.18;
     int spec=countSpMoves(fig);
     if(fig.inf_movement[HORZ_MOVEMENT]){
         int SInf=fig.inf_movement[VERT_MOVEMENT]+fig.inf_movement[MAIN_DIAG]+fig.inf_movement[OTHER_DIAG];

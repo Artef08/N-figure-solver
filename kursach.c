@@ -778,7 +778,7 @@ void StartSolve(GtkButton* button, gpointer userData) {
     if (ind != -1) {
         gtk_widget_set_sensitive(GTK_WIDGET(button), FALSE);
         g_atomic_int_set(&solve_cancel, 0);
-        g_timeout_add_seconds(60, cancelSolveTimeout, button);
+        g_timeout_add_seconds(60*15, cancelSolveTimeout, button);
 
         SolveThreadData* tdata = malloc(sizeof(SolveThreadData));
         tdata->fig = data->figures[ind];
