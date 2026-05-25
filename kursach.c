@@ -891,7 +891,7 @@ static gboolean ExitProg(GtkWidget* button,gpointer userData){
 static void NextSolution(GtkWidget* button,gpointer userData){ 
     GtkWidget* board=GTK_WIDGET(userData);
     Queue* q=g_object_get_data(G_OBJECT(board),"solution-queue");
-    if(!q)return;
+    if(!q || !q->front)return;
 
     int* curSolve=NULL;
     uint64_t curSolveNum=q->front->num;
@@ -912,7 +912,7 @@ static void NextSolution(GtkWidget* button,gpointer userData){
 static void PrevSolution(GtkWidget* button,gpointer userData){ 
     GtkWidget* board=GTK_WIDGET(userData);
     Queue* q=g_object_get_data(G_OBJECT(board),"solution-queue");
-    if(!q)return;
+    if(!q || !q->front)return;
 
     int* curSolve=NULL;
     uint64_t curSolveNum=q->tail->num;
@@ -1121,7 +1121,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_window_set_title(GTK_WINDOW(window), "N-Piece Solver");
 
     //creating radio button box
-    box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_set_homogeneous(GTK_BOX(box), TRUE);
     gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
@@ -1152,7 +1152,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget* boxAddRem = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
     gtk_widget_set_size_request(boxAddRem,WIDTH,-1);
     gtk_widget_set_hexpand(boxAddRem, FALSE);
-    gtk_widget_set_halign(boxAddRem, GTK_ALIGN_START);
+    gtk_widget_set_halign(boxAddRem, GTK_ALIGN_CENTER);
 
     GtkWidget* buttonAdd = gtk_button_new();
     GtkWidget* imgPlus = gtk_image_new_from_icon_name("list-add-symbolic");
@@ -1192,6 +1192,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_halign(scaleN, GTK_ALIGN_START);
     g_object_set_data(G_OBJECT(box),"scale-change",scaleN);
 
+
     dataAddfig->name=g_strdup("Amazon");
     dataAddfig->newFig=InitMagarg();
 
@@ -1202,7 +1203,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     dataAddfig->name=g_strdup("");
     dataAddfig->flagButtonSignal=1;
 
-    GtkWidget* boxFile=gtk_box_new(GTK_ORIENTATION_VERTICAL,0);
+    GtkWidget* boxFile=gtk_box_new(GTK_ORIENTATION_VERTICAL,15);
 
     GtkWidget* buttonAddFile= gtk_button_new_with_label("Add figure from a file");
     gtk_widget_set_size_request(buttonAddFile,WIDTH,-1);
@@ -1223,8 +1224,9 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_size_request(buttonSolve,WIDTH,-1);
     gtk_widget_set_hexpand(buttonSolve, FALSE);
     gtk_widget_set_halign(buttonSolve, GTK_ALIGN_START);
+    gtk_widget_add_css_class(buttonSolve,"primary");
 
-    GtkWidget* boxLeft=gtk_box_new(GTK_ORIENTATION_VERTICAL,100);
+    GtkWidget* boxLeft=gtk_box_new(GTK_ORIENTATION_VERTICAL,75);
     gtk_widget_set_halign(boxLeft, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(boxLeft,GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand(boxLeft, TRUE);
@@ -1234,11 +1236,13 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_opacity(labelSolutions,0.0); 
     g_object_set_data(G_OBJECT(buttonSolve),"label-solutions",labelSolutions);
     g_object_set_data(G_OBJECT(scaleN),"label-hide",labelSolutions);
+    gtk_widget_add_css_class(labelSolutions,"solutions");
 
     GtkWidget* labelNumSolve=gtk_label_new("");
     gtk_widget_set_opacity(labelNumSolve,0.0);
     g_object_set_data(G_OBJECT(buttonSolve),"label-num-solve",labelNumSolve);
     g_object_set_data(G_OBJECT(scaleN),"hide-num-solve-label",labelNumSolve);
+    gtk_widget_add_css_class(labelNumSolve,"solutions");
 
     GtkWidget* buttonGo=gtk_button_new_with_label("Go to solution");
     gtk_widget_set_size_request(buttonGo,WIDTH,-1);
@@ -1294,6 +1298,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_hexpand(buttonExit, FALSE);
     gtk_widget_set_halign(buttonExit, GTK_ALIGN_CENTER);
     gtk_widget_set_valign(buttonExit, GTK_ALIGN_CENTER);
+    gtk_widget_add_css_class(buttonExit,"danger");
 
     loadFigure();
     figRescale(DEFAULT_SIZE);
@@ -1367,6 +1372,11 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_box_append(GTK_BOX(mainBox),vbox);
     gtk_box_append(GTK_BOX(mainBox),board);
     gtk_box_append(GTK_BOX(mainBox),boxLeft);
+
+    GtkCssProvider* cssProvider=gtk_css_provider_new();
+    gtk_css_provider_load_from_path(cssProvider,"assets/style.css");
+    gtk_style_context_add_provider_for_display(gdk_display_get_default(),GTK_STYLE_PROVIDER(cssProvider),GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(cssProvider);
 
     gtk_window_set_child(GTK_WINDOW(window), mainBox);
     gtk_window_fullscreen(GTK_WINDOW(window));
