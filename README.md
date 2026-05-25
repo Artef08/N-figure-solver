@@ -9,4 +9,4 @@ Now it is in progress with this functions:
 - Finding a solution for n<=100
 - Saving solution as .PNG file
 
-I'm working on visual side with css or xml, deadline is soon, im speeding up
+Now first version is avaivable
