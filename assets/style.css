@@ -9,6 +9,7 @@ button {
     padding: 6px 12px;
     font-size: 14px;
     font-weight: bold;
+    min-width: none;
 }
 
 button:hover {
@@ -97,14 +98,18 @@ drawingarea {
     background-color: rgb(78, 237, 66);
 }
 
-label.title {
-    font-size: 18px;
-    font-weight: bold;
-    color: #2ec1a6;
-}
-
 label.solutions {
     font-size: 20px;
+    font-weight: bold;
+    color: #27ae60;
+    background-color:#13542e;
+    border-radius:12px;
+    padding:8px 14px;
+    margin:4px 0;
+}
+
+label.title {
+    font-size: 30px;
     font-weight: bold;
     color: #27ae60;
     background-color:#13542e;
@@ -119,8 +124,9 @@ entry {
     border: 1px solid #b0b0b019;
 }
 
-.help-text {
+label.help-text {
     font-size: 13px;
-    color: #333333;
+    color: #2cc165;
+    background-color:#175632;
     padding: 10px;
 }

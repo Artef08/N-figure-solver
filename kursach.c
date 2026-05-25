@@ -1109,6 +1109,68 @@ static void goToSolution(GtkWidget* button,gpointer userData){
     gtk_widget_queue_draw(board);
 }
 
+static void onButtonHelp(GtkWidget* button,gpointer userData){
+    static const char *HELP_TEXT =
+    "<b><span size=\"x-large\">🧩 How to Use the N-Piece Solver</span></b>\n\n"
+    "<b>Goal:</b> Place N identical chess-like pieces on an N×N board so that no two pieces attack each other.\n\n"
+    "<b>1. Choosing a Piece</b>\n"
+    "   • The left panel shows a list of available pieces.\n"
+    "   • Click a <u>radio button</u> to select the piece you want to place.\n"
+    "   • Default pieces: <span foreground=\"#2e86c1\">Queen</span>, <span foreground=\"#2e86c1\">Magaraga</span> (queen + knight moves), plus any you’ve added.\n\n"
+    "<b>2. Setting the Board Size</b>\n"
+    "   • Use the <span foreground=\"red\">slider</span> at the top to set N (the number of pieces).\n"
+    "   • The slider’s maximum automatically adjusts to prevent excessive solving time.\n\n"
+    "<b>3. Solving Mode</b>\n"
+    "   • <b>All solutions</b> – finds every arrangement. Works best for small N or strongly constrained pieces.\n"
+    "     Shows navigation arrows and total count.\n"
+    "   • <b>One solution</b> – finds a single valid arrangement quickly, even for N up to 100.\n\n"
+    "<b>4. Solving</b>\n"
+    "   • Click the <b>Solve</b> button. The board will display solutions.\n"
+    "   • A label shows the number of solutions found (for All solutions) or the solution number.\n\n"
+    "<b>5. Navigating Solutions (All solutions mode only)</b>\n"
+    "   • Use ← / → to flip through solutions, or type a number and click <b>Go to solution</b>.\n\n"
+    "<b>6. Saving as Image</b>\n"
+    "   • <b>Save as PNG</b> exports the current board view as a PNG file.\n\n"
+    "<b>7. Adding &amp; Removing Figures</b>\n"
+    "   • <b>+ Add</b> – create a custom piece with a unique name, infinite movements, and knight-like jumps.\n"
+    "   • <b>× Delete</b> – removes the selected figure (except the last one).\n\n"
+    "<b>8. Importing &amp; Exporting Figures</b>\n"
+    "   • <b>Add figure from a file</b> – loads a <tt>.fig</tt> file.\n"
+    "   • <b>Save figure to a file</b> – exports the selected piece to <tt>.fig</tt>.\n\n"
+    "<b>9. Timeout</b>\n"
+    "   • The solver stops after <span foreground=\"red\">60 seconds</span> if it hasn’t finished.\n"
+    "   • You can change this limit in the code (see <tt>cancelSolveTimeout</tt>).\n\n"
+    "<b>10. Exit</b>\n"
+    "   • Click <b>Exit</b> to close the application. Temporary files are cleaned up automatically.\n\n"
+    "<span style=\"italic\">Tip:</span> If a solve takes too long, reduce the board size or switch to <b>One solution</b> mode.";
+    GtkRoot* parent=gtk_widget_get_root(button);
+
+    GtkWidget* helpWnd=gtk_window_new();
+    gtk_window_set_title(GTK_WINDOW(helpWnd),"How to use");
+    gtk_window_set_default_size(GTK_WINDOW(helpWnd),650,500);
+    
+    GtkWidget* scroll=gtk_scrolled_window_new();
+    gtk_widget_set_margin_top(scroll,10);
+    gtk_widget_set_margin_bottom(scroll,10);
+    gtk_widget_set_margin_start(scroll,15);
+    gtk_widget_set_margin_end(scroll,15);
+
+    GtkWidget* label=gtk_label_new(NULL);
+    gtk_label_set_markup(GTK_LABEL(label),HELP_TEXT);
+    gtk_label_set_wrap(GTK_LABEL(label),TRUE);
+    gtk_label_set_selectable(GTK_LABEL(label),TRUE);
+    gtk_widget_add_css_class(label,"help-text");
+    gtk_widget_set_can_focus(label,FALSE);
+
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+    gtk_label_set_yalign(GTK_LABEL(label), 0.0); 
+
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll),label);
+    gtk_window_set_child(GTK_WINDOW(helpWnd),scroll);
+
+    gtk_window_present(GTK_WINDOW(helpWnd));
+}
+
 static void activate(GtkApplication* app, gpointer user_data) {
     GtkWidget* mainBox=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,150);
     gtk_widget_set_halign(mainBox,GTK_ALIGN_CENTER);
@@ -1148,7 +1210,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     dataAddfig->figures=figures;
     dataAddfig->ind=lastInd;
     dataAddfig->flagButtonSignal=0;
-    
+
     GtkWidget* boxAddRem = gtk_box_new(GTK_ORIENTATION_HORIZONTAL,0);
     gtk_widget_set_size_request(boxAddRem,WIDTH,-1);
     gtk_widget_set_hexpand(boxAddRem, FALSE);
@@ -1181,6 +1243,12 @@ static void activate(GtkApplication* app, gpointer user_data) {
     dataRemCurFig->btns=btns;
     dataRemCurFig->figures=figures;
     dataRemCurFig->ind=lastInd;
+
+    GtkWidget* boxHeader=gtk_box_new(GTK_ORIENTATION_VERTICAL,325);
+
+    GtkWidget* labelTitle=gtk_label_new("N figure solver");
+    gtk_widget_set_valign(labelTitle,GTK_ALIGN_START);
+    gtk_widget_add_css_class(labelTitle,"title");
 
     GtkWidget* scaleN = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL,1.0,(double)MAX_SIZE_ALL,1.0);
     gtk_range_set_value(GTK_RANGE(scaleN),(double)DEFAULT_SIZE);
@@ -1231,6 +1299,11 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_widget_set_valign(boxLeft,GTK_ALIGN_CENTER);
     gtk_widget_set_hexpand(boxLeft, TRUE);
     gtk_widget_set_vexpand(boxLeft, TRUE);
+
+    GtkWidget* buttonHelp=gtk_button_new_with_label("Help");
+    gtk_widget_set_size_request(buttonHelp,WIDTH,-1);
+    gtk_widget_set_hexpand(buttonHelp, FALSE);
+    gtk_widget_set_halign(buttonHelp,GTK_ALIGN_CENTER);
 
     GtkWidget* labelSolutions=gtk_label_new("");
     gtk_widget_set_opacity(labelSolutions,0.0); 
@@ -1337,6 +1410,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     g_signal_connect(buttonAddFile,"clicked",G_CALLBACK(onPressAddFromFile),dataAddfig);
     g_signal_connect(editQueue,"changed",G_CALLBACK(changeNum),Number);
     g_signal_connect(buttonGo,"clicked",G_CALLBACK(goToSolution),dataGo);
+    g_signal_connect(buttonHelp,"clicked",G_CALLBACK(onButtonHelp),NULL);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(board),onDraw,data,g_free);
 
     GtkWidget* vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 20);
@@ -1350,6 +1424,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_box_append(GTK_BOX(boxQueue),editQueue);
     gtk_box_append(GTK_BOX(boxQueue),buttonRight);
 
+    gtk_box_append(GTK_BOX(boxLeft),buttonHelp);
     gtk_box_append(GTK_BOX(boxLeft),boxQueue);
     gtk_box_append(GTK_BOX(boxLeft),labelSolutions);
     gtk_box_append(GTK_BOX(boxLeft),labelNumSolve);
@@ -1369,7 +1444,10 @@ static void activate(GtkApplication* app, gpointer user_data) {
     gtk_box_append(GTK_BOX(vbox), checkAllSolves);
     gtk_box_append(GTK_BOX(vbox), buttonSolve);
 
-    gtk_box_append(GTK_BOX(mainBox),vbox);
+    gtk_box_append(GTK_BOX(boxHeader),labelTitle);
+    gtk_box_append(GTK_BOX(boxHeader),vbox);
+
+    gtk_box_append(GTK_BOX(mainBox),boxHeader);
     gtk_box_append(GTK_BOX(mainBox),board);
     gtk_box_append(GTK_BOX(mainBox),boxLeft);
 
