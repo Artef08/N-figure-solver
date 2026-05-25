@@ -1,0 +1,126 @@
+window {
+    background-color: #22430b;
+}
+
+button {
+    background: rgb(179, 219, 236);
+    border: 2px solid #94f8ee;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+button:hover {
+    background-color: #4cd2e9;
+}
+
+button:active {
+    background-color: #2ebd6c;
+}
+
+button.primary {
+    background-color: #29e05a;
+    border-color: #1aab62;
+}
+button.primary label {
+    color: rgb(22, 110, 44);
+}
+button.primary:hover {
+    background-color: #257c51;
+}
+
+button.danger {
+    background-color: #cb2d1f;
+    border-color: #a93226;
+}
+button.danger label {
+    color: rgb(113, 27, 27);
+}
+button.danger:hover {
+    background-color: #81231b;
+}
+
+checkbutton {
+    color:#1aab62;
+    background-color:#13542e;
+    font-size: 20px;
+    font-weight:bold;
+    border-radius:12px;
+    padding:8px 14px;
+    margin:4px 0;
+}
+
+checkbutton check {
+    min-width: 18px;
+    min-height: 18px;
+    background: transparent;             
+    border: 2px solid #1bc93b;         
+    border-radius: 50%;
+    transition: background 0.15s;
+}
+
+checkbutton radio {
+    min-width: 18px;
+    min-height: 18px;
+    background: transparent;             
+    border: 2px solid #1bc93b;         
+    border-radius: 50%;
+    transition: background 0.15s;
+}
+
+scale trough {
+    background: #36e768;
+    border-color: #36e768;
+    border-radius: 4px;
+}
+
+scale highlight {
+    background:#29b859;
+    border-color: #36e768;
+}
+
+scale slider {
+    background-color: #2bac5b;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+}
+
+scale value{
+    font-size: 18px;
+    font-weight: bold;
+    color: #1bc93b;
+}
+
+drawingarea {
+    background-color: rgb(78, 237, 66);
+}
+
+label.title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2ec1a6;
+}
+
+label.solutions {
+    font-size: 20px;
+    font-weight: bold;
+    color: #27ae60;
+    background-color:#13542e;
+    border-radius:12px;
+    padding:8px 14px;
+    margin:4px 0;
+}
+
+entry {
+    border-radius: 4px;
+    padding: 4px;
+    border: 1px solid #b0b0b019;
+}
+
+.help-text {
+    font-size: 13px;
+    color: #333333;
+    padding: 10px;
+}
