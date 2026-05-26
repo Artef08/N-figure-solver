@@ -70,6 +70,11 @@ checkbutton radio {
     transition: background 0.15s;
 }
 
+button:checked{
+    background:rgb(2, 98, 138);
+    border-color:rgb(6, 132, 186);
+}
+
 scale trough {
     background: #36e768;
     border-color: #36e768;
