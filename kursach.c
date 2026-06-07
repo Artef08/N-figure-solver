@@ -8,7 +8,7 @@
 #include "queue.h"
 #include "math.h"
 
-#define MAX_FIGURES 15
+#define MAX_FIGURES 6
 
 #define DEFAULT_SIZE 8
 #define MAX_SIZE_ALL 14     //max size for all solves
@@ -1244,7 +1244,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
     dataRemCurFig->figures=figures;
     dataRemCurFig->ind=lastInd;
 
-    GtkWidget* boxHeader=gtk_box_new(GTK_ORIENTATION_VERTICAL,325);
+    GtkWidget* boxHeader=gtk_box_new(GTK_ORIENTATION_VERTICAL,250);
 
     GtkWidget* labelTitle=gtk_label_new("N figure solver");
     gtk_widget_set_valign(labelTitle,GTK_ALIGN_START);
